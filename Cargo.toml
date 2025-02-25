@@ -1,0 +1,13 @@
+[package]
+name = "pcupback"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+argon2 = "0.5.3"
+rocket = { version = "0.5.1", features = ["json"] }
+rocket_db_pools = { version = "0.2.0", features = ["sqlx", "sqlx_macros", "sqlx_sqlite"] }
+serde = "1.0.218"
+
+[profile.release]
+lto = "fat"
