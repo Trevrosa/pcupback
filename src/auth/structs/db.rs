@@ -1,6 +1,8 @@
-use rocket_db_pools::sqlx::{self, FromRow};
+use rocket_db_pools::sqlx::FromRow;
 
 #[derive(Debug, FromRow)]
 pub struct DBUser {
-    pub name: String
+    pub id: u32,
+    pub username: String,
+    pub hashed_password: String,
 }

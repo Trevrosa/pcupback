@@ -7,9 +7,9 @@ pub struct User {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct UserSession {
-    user: User,
-    session: u64,
+pub struct UserSession {
+    pub user: User,
+    pub session: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
