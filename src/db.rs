@@ -1,5 +1,10 @@
-use rocket_db_pools::{sqlx, Database};
+use serde::Serialize;
+use thiserror::Error;
 
-#[derive(Database)]
-#[database("db")]
-pub struct Db(sqlx::SqlitePool);
+#[derive(Error, Debug, Serialize)]
+pub enum DBErrorKind {
+    #[error("db store error")]
+    StoreError,
+    #[error("db fetch error")]
+    FetchError,
+}
