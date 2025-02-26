@@ -6,7 +6,7 @@ use chrono::{DateTime, TimeDelta, Utc};
 use rocket::{State, post, serde::json::Json};
 use rocket_db_pools::sqlx;
 use serde::Serialize;
-use sqlx::{Pool, Sqlite};
+use sqlx::{Executor, Pool, Sqlite};
 use structs::{
     db::{DBUser, DBUserSession, Storable},
     http::{AuthRequest, UserSession},
@@ -54,15 +54,71 @@ fn session_timeout(dt: DateTime<Utc>) -> bool {
     Utc::now().time() - dt.time() > SESSION_TIMEOUT
 }
 
+/// Check if [`session`] is timed out. If it is, generate and store a new one.
+async fn validate_session<'a>(
+    executor: impl Executor<'a, Database = Sqlite>,
+    session: Result<DBUserSession, sqlx::Error>,
+    new_id: u32,
+) -> Result<UserSession, AuthenticationError> {
+    use AuthenticationError::InternalError;
+
+    match session {
+        // we have a stored session, check if it's timed out.
+        Ok(session) => {
+            // if `last_set` was more than `SESSION_TIMEOUT` ago, we create a new session.
+            let session_last_set = session.last_set_datetime();
+
+            if let Some(session_last_set) = session_last_set {
+                if session_timeout(session_last_set) {
+                    tracing::info!("session timed out, generating new one");
+                    generate_store_session(executor, new_id).await
+                } else {
+                    // session is ok, return it
+                    Ok(session.into())
+                }
+            } else {
+                tracing::error!("no");
+                Err(InternalError)
+            }
+        }
+        // we do not have a stored session, generate one.
+        Err(_) => {
+            tracing::warn!("no session, generating one");
+            generate_store_session(executor, new_id).await
+        }
+    }
+}
+
+// store a session, mapping errors to AuthenticationError, returning Ok(session)
+async fn generate_store_session(
+    executor: impl Executor<'_, Database = Sqlite>,
+    user_id: u32,
+) -> Result<UserSession, AuthenticationError> {
+    use AuthenticationError::DBError;
+    use DBErrorKind::StoreError;
+
+    let session = DBUserSession::generate(user_id);
+    match session.store(executor).await {
+        // stored session successfully, return
+        Ok(_) => Ok(session.into()),
+        Err(err) => {
+            tracing::error!("failed to store session: {err:?}");
+            Err(DBError(StoreError))
+        }
+    }
+}
+
 #[post("/auth", data = "<request>")]
 pub async fn authenticate(
     db: &State<Pool<Sqlite>>,
     request: Json<AuthRequest>,
 ) -> Json<Result<UserSession, AuthenticationError>> {
-    use AuthenticationError::*;
-    use DBErrorKind::*;
-    use HashErrorKind::*;
-    use InvalidPasswordKind::*;
+    use AuthenticationError::{
+        DBError, HashError, InternalUnhandledError, InvalidPassword, WrongPassword,
+    };
+    use DBErrorKind::StoreError;
+    use HashErrorKind::ParseError;
+    use InvalidPasswordKind::{NotEnoughChars, TooManyChars};
 
     // we have &State<Pool<Sqlite>>.
     // deref &State<..> => State<..>
@@ -94,7 +150,7 @@ pub async fn authenticate(
 
             match parse_and_validate {
                 // the stored password parsed successfully and the request password matched!
-                Ok(Ok(_)) => {
+                Ok(Ok(())) => {
                     // lets now provide them a session id.
 
                     tracing::debug!("getting session from db for user {}", existing_user.id);
@@ -104,52 +160,7 @@ pub async fn authenticate(
                             .fetch_one(db)
                             .await;
 
-                    match stored_session {
-                        // we have a stored session
-                        Ok(stored_session) => {
-                            // if `last_set` was more than `SESSION_TIMEOUT` ago, we create a new session.
-                            let session_last_set = stored_session.last_set_datetime();
-
-                            match session_last_set {
-                                Some(session_last_set) => {
-                                    if session_timeout(session_last_set) {
-                                        tracing::info!("session timed out, generating new one");
-                                        let new_session = DBUserSession::generate(existing_user.id);
-
-                                        match new_session.store(db).await {
-                                            // stored session successfully
-                                            Ok(_) => Ok(new_session.into()),
-                                            Err(err) => {
-                                                tracing::error!("failed to store session: {err:?}");
-                                                Err(DBError(StoreError))
-                                            }
-                                        }
-                                    } else {
-                                        // session is ok, return it
-                                        Ok(stored_session.into())
-                                    }
-                                }
-                                None => {
-                                    tracing::error!("no");
-                                    Err(InternalError)
-                                }
-                            }
-                        }
-                        // we do not have a stored session, generate one.
-                        Err(_) => {
-                            tracing::warn!("no session, generating one");
-                            let new_session = DBUserSession::generate(existing_user.id);
-
-                            match new_session.store(db).await {
-                                // stored session successfully, return
-                                Ok(_) => Ok(new_session.into()),
-                                Err(err) => {
-                                    tracing::error!("failed to store session: {err:?}");
-                                    Err(DBError(StoreError))
-                                }
-                            }
-                        }
-                    }
+                    validate_session(db, stored_session, existing_user.id).await
                 }
                 // stored password was parsed, but didnt match.
                 Ok(Err(err)) => match err {
@@ -187,20 +198,17 @@ pub async fn authenticate(
                     // 0 is default
                     .unwrap_or(0);
 
-                let new_user =
-                    DBUser::new(last_id, request.username.clone(), request.password.clone());
+                let new_user = DBUser::new(last_id, &request.username, &request.password);
 
                 match new_user {
                     Ok(new_user) => {
-                        let new_session = DBUserSession::generate(new_user.id);
-
-                        match new_session.store(db).await {
-                            // stored session successfully, return
-                            Ok(_) => Ok(new_session.into()),
-                            Err(err) => {
-                                tracing::error!("failed to store session: {err:?}");
-                                Err(DBError(StoreError))
-                            }
+                        // store the user in db
+                        if let Err(err) = new_user.store(db).await {
+                            tracing::error!("failed to store user: {err:?}");
+                            Err(DBError(StoreError))
+                        } else {
+                            // create and store the session
+                            generate_store_session(db, new_user.id).await
                         }
                     }
                     Err(err) => {

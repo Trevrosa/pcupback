@@ -9,6 +9,22 @@ use uuid::Uuid;
 
 use crate::auth::HashErrorKind::{self, CreateError, ParseError};
 
+/// A type that can be stored into a database of type [`Self::DB`].
+pub trait Storable<'a> {
+    // associated Database type.
+    // we use an associated type instead of a generic type to disallow multiple implementations on a single type.
+    type DB;
+
+    /// Store `self` into the defined [`Self::DB`].
+    ///
+    /// # Errors
+    ///
+    /// See [`sqlx::Error`].
+    async fn store<E>(&self, executor: E) -> Result<SqliteQueryResult, sqlx::Error>
+    where
+        E: Executor<'a, Database = Self::DB>;
+}
+
 #[derive(Debug, FromRow)]
 pub struct DBUser {
     pub id: u32,
@@ -20,7 +36,7 @@ impl DBUser {
     /// Create a new user to be stored in db.
     ///
     /// Hashes the given password.
-    pub fn new(id: u32, username: String, password: String) -> Result<Self, HashErrorKind> {
+    pub fn new(id: u32, username: &str, password: &str) -> Result<Self, HashErrorKind> {
         let mut password_hash = Vec::new();
 
         let salt = SaltString::generate(&mut OsRng);
@@ -36,12 +52,13 @@ impl DBUser {
 
         Ok(Self {
             id,
-            username,
+            username: username.to_string(),
             password_hash,
         })
     }
 
-    pub fn with_hashed(id: u32, username: String, hashed: PasswordHash) -> Self {
+    #[allow(unused)]
+    pub fn with_hashed(id: u32, username: String, hashed: &PasswordHash) -> Self {
         let password_hash = hashed.to_string();
 
         Self {
@@ -49,6 +66,22 @@ impl DBUser {
             username,
             password_hash,
         }
+    }
+}
+
+impl<'a> Storable<'a> for DBUser {
+    type DB = Sqlite;
+
+    async fn store<E>(&self, executor: E) -> Result<SqliteQueryResult, sqlx::Error>
+    where
+        E: Executor<'a, Database = Self::DB>,
+    {
+        sqlx::query("INSERT INTO users(id, username, password_hash) VALUES(?, ?, ?)")
+            .bind(self.id)
+            .bind(self.username.clone())
+            .bind(self.password_hash.clone())
+            .execute(executor)
+            .await
     }
 }
 
@@ -76,22 +109,6 @@ impl DBUserSession {
     pub fn last_set_datetime(&self) -> Option<DateTime<Utc>> {
         DateTime::from_timestamp(self.last_set, 0)
     }
-}
-
-/// A type that can be stored into a database of type [`Self::DB`].
-pub trait Storable<'a> {
-    // associated Database type.
-    // we use an associated type instead of a generic type to disallow multiple implementations on a single type.
-    type DB;
-
-    /// Store `self` into the defined [`Self::DB`].
-    ///
-    /// # Errors
-    ///
-    /// See [`sqlx::Error`].
-    async fn store<E>(&self, executor: E) -> Result<SqliteQueryResult, sqlx::Error>
-    where
-        E: Executor<'a, Database = Self::DB>;
 }
 
 // make user session storable for `Sqlite` databases
