@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::db::{DBUser};
+use super::db::{DBUser, DBUserSession};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
@@ -19,8 +19,17 @@ impl From<DBUser> for User {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserSession {
-    pub user: User,
-    pub id: u64,
+    pub user_id: u32,
+    pub id: String,
+}
+
+impl From<DBUserSession> for UserSession {
+    fn from(value: DBUserSession) -> Self {
+        Self {
+            user_id: value.user_id,
+            id: value.id,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

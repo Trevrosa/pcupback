@@ -1,12 +1,10 @@
 /// Data structs regarding authorization to be shared in requests
 mod structs;
 
-use std::time::{Duration, Instant, SystemTime, SystemTimeError, UNIX_EPOCH};
-
-use argon2::password_hash::{SaltString, rand_core::OsRng};
-use chrono::{DateTime, NaiveDateTime, NaiveTime, TimeDelta, Utc};
+use argon2::{Argon2, PasswordHash, PasswordVerifier, password_hash};
+use chrono::{DateTime, TimeDelta, Utc};
 use rocket::{State, post, serde::json::Json};
-use rocket_db_pools::{Connection, sqlx};
+use rocket_db_pools::sqlx;
 use serde::Serialize;
 use sqlx::{Pool, Sqlite};
 use structs::{
@@ -15,35 +13,44 @@ use structs::{
 };
 use thiserror::Error;
 use tracing::{Level, span};
-use uuid::Uuid;
 
-use crate::{ARGON2, db::DBErrorKind};
+use crate::db::DBErrorKind;
 
 #[derive(Error, Debug, Serialize)]
 pub enum AuthenticationError {
     #[error("password was invalid")]
-    InvalidPassword(#[from] PasswordError),
+    InvalidPassword(#[from] InvalidPasswordKind),
     #[error("password did not match stored password")]
     WrongPassword,
-    #[error("failed to hash password")]
-    FailedToHash,
+    #[error("password hashing failed")]
+    HashError(#[from] HashErrorKind),
     #[error("db error")]
     DBError(#[from] DBErrorKind),
+    #[error("internal error occured while handling request")]
+    InternalError,
+    #[error("unhandled internal error occured while handling request")]
+    InternalUnhandledError,
 }
 
 #[derive(Error, Debug, Serialize)]
-pub enum PasswordError {
-    #[error("not enough characters (min. 6)")]
+pub enum InvalidPasswordKind {
+    #[error("not enough characters (min. 8)")]
     NotEnoughChars,
+    #[error("too many characters (max is 64)")]
+    TooManyChars,
+}
+
+#[derive(Error, Debug, Serialize)]
+pub enum HashErrorKind {
+    #[error("failed to hash")]
+    CreateError,
+    #[error("failed to parse hash")]
+    ParseError,
 }
 
 const SESSION_TIMEOUT: TimeDelta = TimeDelta::days(1);
 
-fn datetime_from_session(session: &DBUserSession) -> Option<DateTime<Utc>> {
-    DateTime::from_timestamp(session.session_id as i64, 0)
-}
-
-fn session_no_timeout(dt: DateTime<Utc>) -> bool {
+fn session_timeout(dt: DateTime<Utc>) -> bool {
     Utc::now().time() - dt.time() > SESSION_TIMEOUT
 }
 
@@ -53,76 +60,157 @@ pub async fn authenticate(
     request: Json<AuthRequest>,
 ) -> Json<Result<UserSession, AuthenticationError>> {
     use AuthenticationError::*;
-    use PasswordError::*;
+    use DBErrorKind::*;
+    use HashErrorKind::*;
+    use InvalidPasswordKind::*;
 
-    // we have &State<Pool<Sqlite>>, so:
+    // we have &State<Pool<Sqlite>>.
     // deref &State<..> => State<..>
     // deref State<T> => T
+    // ref T => &T
+    // we end up with &Pool<Sqlite>
     let db = &**db;
 
+    // FIXME: use the alternatives shown in macro doc below
     let my_span = span!(Level::INFO, "authenticate");
     let _enter = my_span.enter();
 
     // check the database for a user with the same username requested.
     // get it if it exists.
     let existing_user: Result<DBUser, _> = sqlx::query_as("SELECT * FROM users WHERE username = ?")
-        .bind(&request.username)
+        .bind(request.username.trim())
         .fetch_one(db)
         .await;
 
-    let rx_username = request.username.trim();
-
-    // the user exists
     let session: Result<UserSession, AuthenticationError> = match existing_user {
+        // the user requested exists, lets check if the request password hash matches:
         Ok(existing_user) => {
             tracing::info!("got auth request for existing user.");
 
-            // hash the received password
-            let salt = SaltString::generate(&mut OsRng);
-            let mut rx_password_hash = Vec::new();
-
-            let hash_op = ARGON2.hash_password_into(
-                request.password.as_ref(),
-                salt.as_str().as_ref(),
-                &mut rx_password_hash,
-            );
+            let parse_existing_hash = PasswordHash::new(&existing_user.password_hash);
+            let parse_and_validate = parse_existing_hash
+                .map(|e_h| Argon2::default().verify_password(request.password.as_bytes(), &e_h));
             tracing::debug!("hashed password");
 
-            if hash_op.is_err() {
-                return Json(Err(FailedToHash));
-            }
+            match parse_and_validate {
+                // the stored password parsed successfully and the request password matched!
+                Ok(Ok(_)) => {
+                    // lets now provide them a session id.
 
-            if rx_password_hash == existing_user.password_hash.as_bytes() {
-                let session: Result<DBUserSession, _> =
-                    sqlx::query_as("SELECT last_set FROM sessions WHERE user_id = ?")
-                        .bind(existing_user.id)
-                        .fetch_one(db)
-                        .await;
+                    tracing::debug!("getting session from db for user {}", existing_user.id);
+                    let stored_session: Result<DBUserSession, _> =
+                        sqlx::query_as("SELECT last_set FROM sessions WHERE user_id = ?")
+                            .bind(existing_user.id)
+                            .fetch_one(db)
+                            .await;
 
-                match session {
-                    Ok(session) => {
-                        // if `last_set` was more than `SESSION_TIMEOUT` ago, we create a new session.
-                        let session_datetime = datetime_from_session(&session);
+                    match stored_session {
+                        // we have a stored session
+                        Ok(stored_session) => {
+                            // if `last_set` was more than `SESSION_TIMEOUT` ago, we create a new session.
+                            let session_last_set = stored_session.last_set_datetime();
 
-                        if let Some(session_datetime) = session_datetime {
-                            if session_no_timeout(session_datetime) {
-                                let session = DBUserSession::new(existing_user.id);
-                                session.store(db).await;
+                            match session_last_set {
+                                Some(session_last_set) => {
+                                    if session_timeout(session_last_set) {
+                                        tracing::info!("session timed out, generating new one");
+                                        let new_session = DBUserSession::generate(existing_user.id);
+
+                                        match new_session.store(db).await {
+                                            // stored session successfully
+                                            Ok(_) => Ok(new_session.into()),
+                                            Err(err) => {
+                                                tracing::error!("failed to store session: {err:?}");
+                                                Err(DBError(StoreError))
+                                            }
+                                        }
+                                    } else {
+                                        // session is ok, return it
+                                        Ok(stored_session.into())
+                                    }
+                                }
+                                None => {
+                                    tracing::error!("no");
+                                    Err(InternalError)
+                                }
+                            }
+                        }
+                        // we do not have a stored session, generate one.
+                        Err(_) => {
+                            tracing::warn!("no session, generating one");
+                            let new_session = DBUserSession::generate(existing_user.id);
+
+                            match new_session.store(db).await {
+                                // stored session successfully, return
+                                Ok(_) => Ok(new_session.into()),
+                                Err(err) => {
+                                    tracing::error!("failed to store session: {err:?}");
+                                    Err(DBError(StoreError))
+                                }
                             }
                         }
                     }
                 }
-
-                todo!()
-            } else {
-                tracing::debug!("mismatched password");
-                Err(WrongPassword)
+                // stored password was parsed, but didnt match.
+                Ok(Err(err)) => match err {
+                    password_hash::Error::Password => {
+                        tracing::debug!("mismatched password");
+                        Err(WrongPassword)
+                    }
+                    err => {
+                        tracing::error!("got error {err:?} when validating password");
+                        Err(InternalUnhandledError)
+                    }
+                },
+                // failed to parse stored password.
+                Err(err) => {
+                    tracing::error!("got error {err:?} when parsing stored password");
+                    Err(HashError(ParseError))
+                }
             }
         }
-        Err(err) => {
-            todo!()
+        // the requested user doesnt exist. lets try to create a new account:
+        Err(_err) => {
+            tracing::debug!("no existing user, creating new account");
+
+            if request.password.len() < 8 {
+                Err(InvalidPassword(NotEnoughChars))
+            } else if request.password.len() > 64 {
+                Err(InvalidPassword(TooManyChars))
+            } else {
+                // get the largest id in db, or 0 if there are no users.
+                let last_id = sqlx::query_as::<_, (u32,)>("SELECT id FROM users ORDER BY id DESC")
+                    .fetch_one(db)
+                    .await
+                    // unwrap the tuple
+                    .map(|v| v.0)
+                    // 0 is default
+                    .unwrap_or(0);
+
+                let new_user =
+                    DBUser::new(last_id, request.username.clone(), request.password.clone());
+
+                match new_user {
+                    Ok(new_user) => {
+                        let new_session = DBUserSession::generate(new_user.id);
+
+                        match new_session.store(db).await {
+                            // stored session successfully, return
+                            Ok(_) => Ok(new_session.into()),
+                            Err(err) => {
+                                tracing::error!("failed to store session: {err:?}");
+                                Err(DBError(StoreError))
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        tracing::error!("got err {err} trying to create a new user");
+                        Err(HashError(err))
+                    }
+                }
+            }
         }
     };
 
-    Ok(Json(session))
+    Json(session)
 }
