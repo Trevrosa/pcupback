@@ -125,10 +125,12 @@ pub async fn authenticate(
     let my_span = span!(Level::INFO, "authenticate");
     let _enter = my_span.enter();
 
+    let req_username = request.username.trim();
+
     // check the database for a user with the same username requested.
     // get it if it exists.
     let existing_user: Result<DBUser, _> = sqlx::query_as("SELECT * FROM users WHERE username = ?")
-        .bind(request.username.trim())
+        .bind(req_username)
         .fetch_one(db)
         .await;
 
@@ -192,7 +194,8 @@ pub async fn authenticate(
                     // 0 is default
                     .unwrap_or(0);
 
-                let new_user = DBUser::new(last_id, &request.username, &request.password);
+                // we add 1 to get the next id.
+                let new_user = DBUser::new(last_id + 1, req_username, &request.password);
 
                 match new_user {
                     Ok(new_user) => {

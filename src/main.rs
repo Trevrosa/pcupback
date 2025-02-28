@@ -4,8 +4,8 @@ mod db;
 mod tests;
 
 use auth::authenticate;
-use rocket::{get, routes, Ignite, Rocket};
-use sqlx::{migrate, Pool, Sqlite, SqlitePool};
+use rocket::{Ignite, Rocket, get, routes};
+use sqlx::{Pool, Sqlite, SqlitePool, migrate};
 use tracing::level_filters::LevelFilter;
 
 #[get("/")]
