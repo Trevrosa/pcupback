@@ -4,8 +4,8 @@ use thiserror::Error;
 #[allow(unused)]
 #[derive(Error, Debug, Serialize)]
 pub enum DBErrorKind {
-    #[error("db store error")]
-    StoreError,
-    #[error("db fetch error")]
-    FetchError,
+    #[error("StoreError")]
+    StoreError(String),
+    #[error("FetchError")]
+    FetchError(String),
 }

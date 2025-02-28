@@ -1,5 +1,5 @@
 use argon2::{
-    Argon2, PasswordHash,
+    Argon2, PasswordHash, PasswordHasher,
     password_hash::{SaltString, rand_core::OsRng},
 };
 use chrono::{DateTime, Utc};
@@ -7,7 +7,7 @@ use rocket_db_pools::sqlx::FromRow;
 use sqlx::{Executor, Sqlite, sqlite::SqliteQueryResult};
 use uuid::Uuid;
 
-use crate::auth::HashErrorKind::{self, CreateError, ParseError};
+use crate::auth::HashErrorKind::{self, CreateError};
 
 /// A type that can be stored into a database of type [`Self::DB`].
 pub trait Storable<'a> {
@@ -37,18 +37,11 @@ impl DBUser {
     ///
     /// Hashes the given password.
     pub fn new(id: u32, username: &str, password: &str) -> Result<Self, HashErrorKind> {
-        let mut password_hash = Vec::new();
-
         let salt = SaltString::generate(&mut OsRng);
-        Argon2::default()
-            .hash_password_into(
-                password.as_bytes(),
-                salt.as_str().as_bytes(),
-                &mut password_hash,
-            )
-            .map_err(|_| CreateError)?;
-
-        let password_hash = String::from_utf8(password_hash).map_err(|_| ParseError)?;
+        let password_hash = Argon2::default()
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|e| CreateError(e.to_string()))?
+            .to_string();
 
         Ok(Self {
             id,
@@ -82,6 +75,32 @@ impl<'a> Storable<'a> for DBUser {
             .bind(self.password_hash.clone())
             .execute(executor)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlx::{Sqlite, pool::Pool};
+
+    use crate::auth::data::private::{DBUser, Storable};
+
+    use super::DBUserSession;
+
+    #[sqlx::test]
+    async fn store_session(db: Pool<Sqlite>) {
+        let session = DBUserSession::generate(1);
+        session.store(&db).await.unwrap();
+    }
+
+    #[test]
+    fn user_creation() {
+        DBUser::new(1, "test", "12345678").unwrap();
+    }
+
+    #[sqlx::test]
+    async fn store_user(db: Pool<Sqlite>) {
+        let user = DBUser::new(1, "test", "12345678").unwrap();
+        user.store(&db).await.unwrap();
     }
 }
 
@@ -119,13 +138,11 @@ impl<'a> Storable<'a> for DBUserSession {
     where
         E: Executor<'a, Database = Self::DB>,
     {
-        sqlx::query(
-            "INSERT OR REPLACE INTO sessions(user_id, session_id, last_set) VALUES(?, ?, ?)",
-        )
-        .bind(self.user_id)
-        .bind(&self.id)
-        .bind(self.last_set)
-        .execute(executor)
-        .await
+        sqlx::query("INSERT OR REPLACE INTO sessions(user_id, id, last_set) VALUES(?, ?, ?)")
+            .bind(self.user_id)
+            .bind(&self.id)
+            .bind(self.last_set)
+            .execute(executor)
+            .await
     }
 }

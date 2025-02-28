@@ -1,16 +1,16 @@
 /// Data structs regarding authorization to be shared in requests
-mod structs;
+mod data;
 
 use argon2::{Argon2, PasswordHash, PasswordVerifier, password_hash};
 use chrono::{DateTime, TimeDelta, Utc};
+use data::{
+    private::{DBUser, DBUserSession, Storable},
+    public::UserSession,
+};
 use rocket::{State, post, serde::json::Json};
 use rocket_db_pools::sqlx;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{Executor, Pool, Sqlite};
-use structs::{
-    db::{DBUser, DBUserSession, Storable},
-    http::{AuthRequest, UserSession},
-};
 use thiserror::Error;
 use tracing::{Level, span};
 
@@ -18,34 +18,38 @@ use crate::db::DBErrorKind;
 
 #[derive(Error, Debug, Serialize)]
 pub enum AuthenticationError {
-    #[error("password was invalid")]
+    #[error("InvalidPassword")]
     InvalidPassword(#[from] InvalidPasswordKind),
-    #[error("password did not match stored password")]
+    #[error("WrongPassword")]
     WrongPassword,
-    #[error("password hashing failed")]
+    #[error("HashError")]
     HashError(#[from] HashErrorKind),
     #[error("db error")]
     DBError(#[from] DBErrorKind),
-    #[error("internal error occured while handling request")]
-    InternalError,
-    #[error("unhandled internal error occured while handling request")]
-    InternalUnhandledError,
+    #[error("InternalError")]
+    InternalError(String),
 }
 
 #[derive(Error, Debug, Serialize)]
 pub enum InvalidPasswordKind {
-    #[error("not enough characters (min. 8)")]
+    #[error("NotEnoughChars")]
     NotEnoughChars,
-    #[error("too many characters (max is 64)")]
+    #[error("TooManyChars")]
     TooManyChars,
 }
 
 #[derive(Error, Debug, Serialize)]
 pub enum HashErrorKind {
-    #[error("failed to hash")]
-    CreateError,
-    #[error("failed to parse hash")]
-    ParseError,
+    #[error("CreateError")]
+    CreateError(String),
+    #[error("ParseError")]
+    ParseError(String),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuthRequest {
+    pub username: String,
+    pub password: String,
 }
 
 const SESSION_TIMEOUT: TimeDelta = TimeDelta::days(1);
@@ -60,32 +64,24 @@ async fn validate_session<'a>(
     session: Result<DBUserSession, sqlx::Error>,
     new_id: u32,
 ) -> Result<UserSession, AuthenticationError> {
-    use AuthenticationError::InternalError;
+    if let Ok(session) = session {
+        // if `last_set` was more than `SESSION_TIMEOUT` ago, we create a new session.
+        let session_last_set = session.last_set_datetime();
 
-    match session {
-        // we have a stored session, check if it's timed out.
-        Ok(session) => {
-            // if `last_set` was more than `SESSION_TIMEOUT` ago, we create a new session.
-            let session_last_set = session.last_set_datetime();
-
-            if let Some(session_last_set) = session_last_set {
-                if session_timeout(session_last_set) {
-                    tracing::info!("session timed out, generating new one");
-                    generate_store_session(executor, new_id).await
-                } else {
-                    // session is ok, return it
-                    Ok(session.into())
-                }
+        if let Some(session_last_set) = session_last_set {
+            if session_timeout(session_last_set) {
+                tracing::info!("session timed out, generating new one");
+                generate_store_session(executor, new_id).await
             } else {
-                tracing::error!("no");
-                Err(InternalError)
+                // session is ok, return it
+                Ok(session.into())
             }
-        }
-        // we do not have a stored session, generate one.
-        Err(_) => {
-            tracing::warn!("no session, generating one");
+        } else {
             generate_store_session(executor, new_id).await
         }
+    } else {
+        tracing::warn!("no session, generating one");
+        generate_store_session(executor, new_id).await
     }
 }
 
@@ -103,7 +99,7 @@ async fn generate_store_session(
         Ok(_) => Ok(session.into()),
         Err(err) => {
             tracing::error!("failed to store session: {err:?}");
-            Err(DBError(StoreError))
+            Err(DBError(StoreError(err.to_string())))
         }
     }
 }
@@ -113,9 +109,7 @@ pub async fn authenticate(
     db: &State<Pool<Sqlite>>,
     request: Json<AuthRequest>,
 ) -> Json<Result<UserSession, AuthenticationError>> {
-    use AuthenticationError::{
-        DBError, HashError, InternalUnhandledError, InvalidPassword, WrongPassword,
-    };
+    use AuthenticationError::{DBError, HashError, InternalError, InvalidPassword, WrongPassword};
     use DBErrorKind::StoreError;
     use HashErrorKind::ParseError;
     use InvalidPasswordKind::{NotEnoughChars, TooManyChars};
@@ -152,37 +146,37 @@ pub async fn authenticate(
                 // the stored password parsed successfully and the request password matched!
                 Ok(Ok(())) => {
                     // lets now provide them a session id.
+                    tracing::info!("getting session from db for user {}", existing_user.id);
 
-                    tracing::debug!("getting session from db for user {}", existing_user.id);
-                    let stored_session: Result<DBUserSession, _> =
-                        sqlx::query_as("SELECT last_set FROM sessions WHERE user_id = ?")
+                    let last_set: Result<DBUserSession, _> =
+                        sqlx::query_as("SELECT * FROM sessions WHERE user_id = ?")
                             .bind(existing_user.id)
                             .fetch_one(db)
                             .await;
 
-                    validate_session(db, stored_session, existing_user.id).await
+                    validate_session(db, last_set, existing_user.id).await
                 }
                 // stored password was parsed, but didnt match.
                 Ok(Err(err)) => match err {
                     password_hash::Error::Password => {
-                        tracing::debug!("mismatched password");
+                        tracing::info!("mismatched password");
                         Err(WrongPassword)
                     }
                     err => {
                         tracing::error!("got error {err:?} when validating password");
-                        Err(InternalUnhandledError)
+                        Err(InternalError(err.to_string()))
                     }
                 },
                 // failed to parse stored password.
                 Err(err) => {
                     tracing::error!("got error {err:?} when parsing stored password");
-                    Err(HashError(ParseError))
+                    Err(HashError(ParseError(err.to_string())))
                 }
             }
         }
         // the requested user doesnt exist. lets try to create a new account:
         Err(_err) => {
-            tracing::debug!("no existing user, creating new account");
+            tracing::info!("no existing user, creating new account");
 
             if request.password.len() < 8 {
                 Err(InvalidPassword(NotEnoughChars))
@@ -205,7 +199,7 @@ pub async fn authenticate(
                         // store the user in db
                         if let Err(err) = new_user.store(db).await {
                             tracing::error!("failed to store user: {err:?}");
-                            Err(DBError(StoreError))
+                            Err(DBError(StoreError(err.to_string())))
                         } else {
                             // create and store the session
                             generate_store_session(db, new_user.id).await

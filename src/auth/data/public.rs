@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::db::{DBUser, DBUserSession};
+use super::private::{DBUser, DBUserSession};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
@@ -30,10 +30,4 @@ impl From<DBUserSession> for UserSession {
             id: value.id,
         }
     }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AuthRequest {
-    pub username: String,
-    pub password: String,
 }

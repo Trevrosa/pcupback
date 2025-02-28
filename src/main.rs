@@ -1,13 +1,30 @@
 mod auth;
 mod db;
+#[cfg(test)]
+mod tests;
 
 use auth::authenticate;
-use rocket::{get, routes};
-use sqlx::{SqlitePool, migrate};
+use rocket::{get, routes, Ignite, Rocket};
+use sqlx::{migrate, Pool, Sqlite, SqlitePool};
+use tracing::level_filters::LevelFilter;
 
 #[get("/")]
 fn index<'a>() -> &'a str {
     "Hello, World!"
+}
+
+#[cfg(debug_assertions)]
+const LOG_LEVEL: LevelFilter = LevelFilter::DEBUG;
+#[cfg(not(debug_assertions))]
+const LOG_LEVEL: LevelFilter = LevelFilter::INFO;
+
+async fn launch(db_pool: Pool<Sqlite>) -> Rocket<Ignite> {
+    rocket::build()
+        .manage(db_pool)
+        .mount("/", routes![index, authenticate])
+        .launch()
+        .await
+        .unwrap()
 }
 
 #[rocket::main]
@@ -23,11 +40,9 @@ async fn main() -> Result<(), rocket::Error> {
         .await
         .expect("could not run migrations");
 
-    let _result = rocket::build()
-        .manage(db_pool)
-        .mount("/", routes![index, authenticate])
-        .launch()
-        .await;
+    tracing_subscriber::fmt().with_max_level(LOG_LEVEL).init();
+
+    launch(db_pool).await;
 
     Ok(())
 }
