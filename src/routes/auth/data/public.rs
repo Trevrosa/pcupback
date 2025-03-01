@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::private::DBUserSession;
 
+// FIXME: move this?
 // #[derive(Debug, Serialize, Deserialize)]
 // pub struct User {
 //     pub name: String,

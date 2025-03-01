@@ -6,9 +6,9 @@ use rocket::{
 
 use crate::routes::auth::AuthRequest;
 
-use super::{AuthenticationError, data::public::UserSession};
+use super::{AuthError, data::public::UserSession};
 
-type AuthResult = Result<UserSession, AuthenticationError>;
+type AuthResult = Result<UserSession, AuthError>;
 
 #[rocket::async_test]
 async fn not_enough_chars() {
@@ -32,7 +32,7 @@ async fn not_enough_chars() {
     let invalid_resp_json: AuthResult = resp.into_json().await.unwrap();
     assert!(matches!(
         invalid_resp_json.unwrap_err(),
-        AuthenticationError::InvalidPassword(NotEnoughChars)
+        AuthError::InvalidPassword(NotEnoughChars)
     ));
 }
 
@@ -58,7 +58,7 @@ async fn too_many_chars() {
     let resp_json: AuthResult = resp.into_json().await.unwrap();
     assert!(matches!(
         resp_json.unwrap_err(),
-        AuthenticationError::InvalidPassword(TooManyChars)
+        AuthError::InvalidPassword(TooManyChars)
     ));
 }
 

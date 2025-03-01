@@ -11,15 +11,15 @@ fn index<'a>() -> &'a str {
     "Hello, World!"
 }
 
-#[cfg(debug_assertions)]
-const LOG_LEVEL: LevelFilter = LevelFilter::DEBUG;
 #[cfg(not(debug_assertions))]
 const LOG_LEVEL: LevelFilter = LevelFilter::INFO;
+#[cfg(debug_assertions)]
+const LOG_LEVEL: LevelFilter = LevelFilter::DEBUG;
 
-#[cfg(test)]
-const DB_PATH: &str = "test.db";
 #[cfg(not(test))]
 const DB_PATH: &str = "xdd.db";
+#[cfg(test)]
+const DB_PATH: &str = "test.db";
 
 async fn rocket() -> Rocket<Build> {
     let db_options = SqliteConnectOptions::new()

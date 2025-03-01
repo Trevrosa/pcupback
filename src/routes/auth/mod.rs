@@ -23,7 +23,7 @@ use tracing::{Level, span};
 use crate::db::DBErrorKind;
 
 #[derive(Error, Debug, Serialize, Deserialize)]
-pub enum AuthenticationError {
+pub enum AuthError {
     #[error("InvalidPassword")]
     InvalidPassword(#[from] InvalidPasswordKind),
     #[error("WrongPassword")]
@@ -64,12 +64,12 @@ fn session_timeout(dt: DateTime<Utc>) -> bool {
     Utc::now().time() - dt.time() > SESSION_TIMEOUT
 }
 
-/// Check if [`session`] is timed out. If it is, generate and store a new one.
+/// Check if `session` is timed out. If it is, generate and store a new one.
 async fn validate_session<'a>(
     executor: impl Executor<'a, Database = Sqlite>,
     session: Result<DBUserSession, sqlx::Error>,
     new_id: u32,
-) -> Result<UserSession, AuthenticationError> {
+) -> Result<UserSession, AuthError> {
     if let Ok(session) = session {
         // if `last_set` was more than `SESSION_TIMEOUT` ago, we create a new session.
         let session_last_set = session.last_set_datetime();
@@ -95,8 +95,8 @@ async fn validate_session<'a>(
 async fn generate_store_session(
     executor: impl Executor<'_, Database = Sqlite>,
     user_id: u32,
-) -> Result<UserSession, AuthenticationError> {
-    use AuthenticationError::DBError;
+) -> Result<UserSession, AuthError> {
+    use AuthError::DBError;
     use DBErrorKind::StoreError;
 
     let session = DBUserSession::generate(user_id);
@@ -114,8 +114,8 @@ async fn generate_store_session(
 pub async fn authenticate(
     db: &State<Pool<Sqlite>>,
     request: Json<AuthRequest>,
-) -> Json<Result<UserSession, AuthenticationError>> {
-    use AuthenticationError::{DBError, HashError, InternalError, InvalidPassword, WrongPassword};
+) -> Json<Result<UserSession, AuthError>> {
+    use AuthError::{DBError, HashError, InternalError, InvalidPassword, WrongPassword};
     use DBErrorKind::StoreError;
     use HashErrorKind::ParseError;
     use InvalidPasswordKind::{NotEnoughChars, TooManyChars};
@@ -140,7 +140,7 @@ pub async fn authenticate(
         .fetch_one(db)
         .await;
 
-    let session: Result<UserSession, AuthenticationError> = match existing_user {
+    let session: Result<UserSession, AuthError> = match existing_user {
         // the user requested exists, lets check if the request password hash matches:
         Ok(existing_user) => {
             tracing::info!("got auth request for existing user.");
