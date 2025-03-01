@@ -1,11 +1,9 @@
-mod auth;
 mod db;
-#[cfg(test)]
-mod tests;
+mod routes;
 
-use auth::authenticate;
-use rocket::{Ignite, Rocket, get, routes};
-use sqlx::{Pool, Sqlite, SqlitePool, migrate};
+use rocket::{Build, Rocket, get, routes};
+use routes::auth::authenticate;
+use sqlx::{SqlitePool, migrate, sqlite::SqliteConnectOptions};
 use tracing::level_filters::LevelFilter;
 
 #[get("/")]
@@ -18,18 +16,16 @@ const LOG_LEVEL: LevelFilter = LevelFilter::DEBUG;
 #[cfg(not(debug_assertions))]
 const LOG_LEVEL: LevelFilter = LevelFilter::INFO;
 
-async fn launch(db_pool: Pool<Sqlite>) -> Rocket<Ignite> {
-    rocket::build()
-        .manage(db_pool)
-        .mount("/", routes![index, authenticate])
-        .launch()
-        .await
-        .unwrap()
-}
+#[cfg(test)]
+const DB_PATH: &str = "test.db";
+#[cfg(not(test))]
+const DB_PATH: &str = "xdd.db";
 
-#[rocket::main]
-async fn main() -> Result<(), rocket::Error> {
-    let db_pool = SqlitePool::connect("sqlite://db.sqlite")
+async fn rocket() -> Rocket<Build> {
+    let db_options = SqliteConnectOptions::new()
+        .filename(DB_PATH)
+        .create_if_missing(true);
+    let db_pool = SqlitePool::connect_with(db_options)
         .await
         .expect("could not open db");
 
@@ -40,9 +36,16 @@ async fn main() -> Result<(), rocket::Error> {
         .await
         .expect("could not run migrations");
 
-    tracing_subscriber::fmt().with_max_level(LOG_LEVEL).init();
+    rocket::build()
+        .manage(db_pool)
+        .mount("/", routes![index, authenticate])
+}
 
-    launch(db_pool).await;
+#[rocket::main]
+async fn main() -> Result<(), rocket::Error> {
+    // FIXME: see if we can change the ugly "rocket::launch::_:".
+    tracing_subscriber::fmt().with_max_level(LOG_LEVEL).init();
+    rocket().await.launch().await.unwrap();
 
     Ok(())
 }

@@ -1,5 +1,8 @@
-/// Data structs regarding authorization to be shared in requests
-mod data;
+/// Data structs regarding authorization shared in requests
+pub mod data;
+
+#[cfg(test)]
+mod tests;
 
 use argon2::{Argon2, PasswordHash, PasswordVerifier, password_hash};
 use chrono::{DateTime, TimeDelta, Utc};
@@ -7,7 +10,10 @@ use data::{
     private::{DBUser, DBUserSession, Storable},
     public::UserSession,
 };
-use rocket::{State, post, serde::json::Json};
+use rocket::{
+    State, post,
+    serde::json::{self, Json},
+};
 use rocket_db_pools::sqlx;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, Pool, Sqlite};
@@ -16,7 +22,7 @@ use tracing::{Level, span};
 
 use crate::db::DBErrorKind;
 
-#[derive(Error, Debug, Serialize)]
+#[derive(Error, Debug, Serialize, Deserialize)]
 pub enum AuthenticationError {
     #[error("InvalidPassword")]
     InvalidPassword(#[from] InvalidPasswordKind),
@@ -30,7 +36,7 @@ pub enum AuthenticationError {
     InternalError(String),
 }
 
-#[derive(Error, Debug, Serialize)]
+#[derive(Error, Debug, Serialize, Deserialize)]
 pub enum InvalidPasswordKind {
     #[error("NotEnoughChars")]
     NotEnoughChars,
@@ -38,7 +44,7 @@ pub enum InvalidPasswordKind {
     TooManyChars,
 }
 
-#[derive(Error, Debug, Serialize)]
+#[derive(Error, Debug, Serialize, Deserialize)]
 pub enum HashErrorKind {
     #[error("CreateError")]
     CreateError(String),
@@ -181,8 +187,10 @@ pub async fn authenticate(
             tracing::info!("no existing user, creating new account");
 
             if request.password.len() < 8 {
+                tracing::info!("password chars < 8");
                 Err(InvalidPassword(NotEnoughChars))
             } else if request.password.len() > 64 {
+                tracing::info!("password chars > 64");
                 Err(InvalidPassword(TooManyChars))
             } else {
                 // get the largest id in db, or 0 if there are no users.
@@ -217,5 +225,9 @@ pub async fn authenticate(
         }
     };
 
+    tracing::debug!(
+        "json response: {}",
+        json::to_pretty_string(&session).unwrap()
+    );
     Json(session)
 }

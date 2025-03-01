@@ -7,7 +7,7 @@ use rocket_db_pools::sqlx::FromRow;
 use sqlx::{Executor, Sqlite, sqlite::SqliteQueryResult};
 use uuid::Uuid;
 
-use crate::auth::HashErrorKind::{self, CreateError};
+use crate::routes::auth::HashErrorKind::{self, CreateError};
 
 /// A type that can be stored into a database of type [`Self::DB`].
 pub trait Storable<'a> {
@@ -82,7 +82,7 @@ impl<'a> Storable<'a> for DBUser {
 mod tests {
     use sqlx::{Sqlite, pool::Pool};
 
-    use crate::auth::data::private::{DBUser, Storable};
+    use crate::routes::auth::data::private::{DBUser, Storable};
 
     use super::DBUserSession;
 

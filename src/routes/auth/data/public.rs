@@ -1,21 +1,21 @@
 use serde::{Deserialize, Serialize};
 
-use super::private::{DBUser, DBUserSession};
+use super::private::DBUserSession;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct User {
-    pub name: String,
-    pub id: u32,
-}
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct User {
+//     pub name: String,
+//     pub id: u32,
+// }
 
-impl From<DBUser> for User {
-    fn from(value: DBUser) -> Self {
-        Self {
-            name: value.username,
-            id: value.id,
-        }
-    }
-}
+// impl From<DBUser> for User {
+//     fn from(value: DBUser) -> Self {
+//         Self {
+//             name: value.username,
+//             id: value.id,
+//         }
+//     }
+// }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserSession {
