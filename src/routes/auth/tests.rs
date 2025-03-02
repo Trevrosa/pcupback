@@ -3,21 +3,21 @@ use rocket::{
     local::asynchronous::Client,
     serde::json,
 };
+use uuid::Uuid;
 
-use crate::routes::auth::AuthRequest;
-
-use super::{AuthError, data::public::UserSession};
-
-type AuthResult = Result<UserSession, AuthError>;
+use super::{
+    AuthResult,
+    data::public::{AuthError, AuthRequest},
+};
 
 #[rocket::async_test]
 async fn not_enough_chars() {
-    use crate::routes::auth::InvalidPasswordKind::NotEnoughChars;
+    use super::data::public::InvalidPasswordKind::TooFewChars;
 
     let client = Client::tracked(crate::rocket().await).await.unwrap();
 
     let req = AuthRequest {
-        username: "xdd".to_string(),
+        username: Uuid::new_v4().to_string(),
         password: "123".to_string(),
     };
 
@@ -32,18 +32,18 @@ async fn not_enough_chars() {
     let invalid_resp_json: AuthResult = resp.into_json().await.unwrap();
     assert!(matches!(
         invalid_resp_json.unwrap_err(),
-        AuthError::InvalidPassword(NotEnoughChars)
+        AuthError::InvalidPassword(TooFewChars)
     ));
 }
 
 #[rocket::async_test]
 async fn too_many_chars() {
-    use crate::routes::auth::InvalidPasswordKind::TooManyChars;
+    use super::data::public::InvalidPasswordKind::TooManyChars;
 
     let client = Client::tracked(crate::rocket().await).await.unwrap();
 
     let req = AuthRequest {
-        username: "xdd".to_string(),
+        username: Uuid::new_v4().to_string(),
         password: "1".repeat(65),
     };
 
@@ -67,7 +67,7 @@ async fn login() {
     let client = Client::tracked(crate::rocket().await).await.unwrap();
 
     let req = AuthRequest {
-        username: "xdd".to_string(),
+        username: Uuid::new_v4().to_string(),
         password: "1".repeat(8),
     };
 

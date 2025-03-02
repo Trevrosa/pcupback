@@ -1,22 +1,9 @@
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use pcupback::DBErrorKind;
 
 use super::private::DBUserSession;
-
-// FIXME: move this?
-// #[derive(Debug, Serialize, Deserialize)]
-// pub struct User {
-//     pub name: String,
-//     pub id: u32,
-// }
-
-// impl From<DBUser> for User {
-//     fn from(value: DBUser) -> Self {
-//         Self {
-//             name: value.username,
-//             id: value.id,
-//         }
-//     }
-// }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserSession {
@@ -31,4 +18,40 @@ impl From<DBUserSession> for UserSession {
             id: value.id,
         }
     }
+}
+
+#[derive(Error, Debug, Serialize, Deserialize)]
+pub enum AuthError {
+    #[error("InvalidPassword")]
+    InvalidPassword(#[from] InvalidPasswordKind),
+    #[error("WrongPassword")]
+    WrongPassword,
+    #[error("HashError")]
+    HashError(#[from] HashErrorKind),
+    #[error("db error")]
+    DBError(#[from] DBErrorKind),
+    #[error("InternalError")]
+    InternalError(String),
+}
+
+#[derive(Error, Debug, Serialize, Deserialize)]
+pub enum InvalidPasswordKind {
+    #[error("TooFewChars")]
+    TooFewChars,
+    #[error("TooManyChars")]
+    TooManyChars,
+}
+
+#[derive(Error, Debug, Serialize, Deserialize)]
+pub enum HashErrorKind {
+    #[error("CreateError")]
+    CreateError(String),
+    #[error("ParseError")]
+    ParseError(String),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuthRequest {
+    pub username: String,
+    pub password: String,
 }

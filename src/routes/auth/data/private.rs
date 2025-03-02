@@ -3,27 +3,11 @@ use argon2::{
     password_hash::{SaltString, rand_core::OsRng},
 };
 use chrono::{DateTime, Utc};
-use rocket_db_pools::sqlx::FromRow;
-use sqlx::{Executor, Sqlite, sqlite::SqliteQueryResult};
+use pcupback::Storable;
+use sqlx::{Executor, FromRow, Sqlite, sqlite::SqliteQueryResult};
 use uuid::Uuid;
 
-use crate::routes::auth::HashErrorKind::{self, CreateError};
-
-/// A type that can be stored into a database of type [`Self::DB`].
-pub trait Storable<'a> {
-    // associated Database type.
-    // we use an associated type instead of a generic type to disallow multiple implementations on a single type.
-    type DB;
-
-    /// Store `self` into the defined [`Self::DB`].
-    ///
-    /// # Errors
-    ///
-    /// See [`sqlx::Error`].
-    async fn store<E>(&self, executor: E) -> Result<SqliteQueryResult, sqlx::Error>
-    where
-        E: Executor<'a, Database = Self::DB>;
-}
+use super::public::HashErrorKind::{self, CreateError};
 
 #[derive(Debug, FromRow)]
 pub struct DBUser {
@@ -36,27 +20,31 @@ impl DBUser {
     /// Create a new user to be stored in db.
     ///
     /// Hashes the given password.
-    pub fn new(id: u32, username: &str, password: &str) -> Result<Self, HashErrorKind> {
+    pub fn new(
+        id: u32,
+        username: impl Into<String>,
+        password: impl AsRef<str>,
+    ) -> Result<Self, HashErrorKind> {
         let salt = SaltString::generate(&mut OsRng);
         let password_hash = Argon2::default()
-            .hash_password(password.as_bytes(), &salt)
+            .hash_password(password.as_ref().as_bytes(), &salt)
             .map_err(|e| CreateError(e.to_string()))?
             .to_string();
 
         Ok(Self {
             id,
-            username: username.to_string(),
+            username: username.into(),
             password_hash,
         })
     }
 
     #[allow(unused)]
-    pub fn with_hashed(id: u32, username: String, hashed: &PasswordHash) -> Self {
+    pub fn with_hashed(id: u32, username: impl Into<String>, hashed: &PasswordHash) -> Self {
         let password_hash = hashed.to_string();
 
         Self {
             id,
-            username,
+            username: username.into(),
             password_hash,
         }
     }
@@ -75,32 +63,6 @@ impl<'a> Storable<'a> for DBUser {
             .bind(self.password_hash.clone())
             .execute(executor)
             .await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use sqlx::{Sqlite, pool::Pool};
-
-    use crate::routes::auth::data::private::{DBUser, Storable};
-
-    use super::DBUserSession;
-
-    #[sqlx::test]
-    async fn store_session(db: Pool<Sqlite>) {
-        let session = DBUserSession::generate(1);
-        session.store(&db).await.unwrap();
-    }
-
-    #[test]
-    fn user_creation() {
-        DBUser::new(1, "test", "12345678").unwrap();
-    }
-
-    #[sqlx::test]
-    async fn store_user(db: Pool<Sqlite>) {
-        let user = DBUser::new(1, "test", "12345678").unwrap();
-        user.store(&db).await.unwrap();
     }
 }
 
@@ -144,5 +106,31 @@ impl<'a> Storable<'a> for DBUserSession {
             .bind(self.last_set)
             .execute(executor)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlx::{Sqlite, pool::Pool};
+
+    use crate::routes::auth::data::private::{DBUser, Storable};
+
+    use super::DBUserSession;
+
+    #[sqlx::test]
+    async fn store_session(db: Pool<Sqlite>) {
+        let session = DBUserSession::generate(1);
+        session.store(&db).await.unwrap();
+    }
+
+    #[test]
+    fn user_creation() {
+        DBUser::new(1, "test", "12345678").unwrap();
+    }
+
+    #[sqlx::test]
+    async fn store_user(db: Pool<Sqlite>) {
+        let user = DBUser::new(1, "test", "12345678").unwrap();
+        user.store(&db).await.unwrap();
     }
 }

@@ -1,8 +1,7 @@
-mod db;
 mod routes;
 
 use rocket::{Build, Rocket, get, routes};
-use routes::auth::authenticate;
+use routes::{auth::authenticate, sync::sync};
 use sqlx::{SqlitePool, migrate, sqlite::SqliteConnectOptions};
 use tracing::level_filters::LevelFilter;
 
@@ -29,7 +28,7 @@ async fn rocket() -> Rocket<Build> {
         .await
         .expect("could not open db");
 
-    // do db migrations. (./migrations dir)
+    // do db migrations. (from the `./migrations` dir)
     let migrator = migrate!();
     migrator
         .run(&db_pool)
@@ -38,11 +37,13 @@ async fn rocket() -> Rocket<Build> {
 
     rocket::build()
         .manage(db_pool)
-        .mount("/", routes![index, authenticate])
+        .mount("/", routes![index, authenticate, sync])
 }
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
+    // FIXME: do we need tracing?
+    // TODO: see tracing-journald
     // FIXME: see if we can change the ugly "rocket::launch::_:".
     tracing_subscriber::fmt().with_max_level(LOG_LEVEL).init();
     rocket().await.launch().await.unwrap();

@@ -7,56 +7,17 @@ mod tests;
 use argon2::{Argon2, PasswordHash, PasswordVerifier, password_hash};
 use chrono::{DateTime, TimeDelta, Utc};
 use data::{
-    private::{DBUser, DBUserSession, Storable},
-    public::UserSession,
+    private::{DBUser, DBUserSession},
+    public::{AuthError, AuthRequest, UserSession},
 };
 use rocket::{
     State, post,
     serde::json::{self, Json},
 };
-use rocket_db_pools::sqlx;
-use serde::{Deserialize, Serialize};
 use sqlx::{Executor, Pool, Sqlite};
-use thiserror::Error;
 use tracing::{Level, span};
 
-use crate::db::DBErrorKind;
-
-#[derive(Error, Debug, Serialize, Deserialize)]
-pub enum AuthError {
-    #[error("InvalidPassword")]
-    InvalidPassword(#[from] InvalidPasswordKind),
-    #[error("WrongPassword")]
-    WrongPassword,
-    #[error("HashError")]
-    HashError(#[from] HashErrorKind),
-    #[error("db error")]
-    DBError(#[from] DBErrorKind),
-    #[error("InternalError")]
-    InternalError(String),
-}
-
-#[derive(Error, Debug, Serialize, Deserialize)]
-pub enum InvalidPasswordKind {
-    #[error("NotEnoughChars")]
-    NotEnoughChars,
-    #[error("TooManyChars")]
-    TooManyChars,
-}
-
-#[derive(Error, Debug, Serialize, Deserialize)]
-pub enum HashErrorKind {
-    #[error("CreateError")]
-    CreateError(String),
-    #[error("ParseError")]
-    ParseError(String),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AuthRequest {
-    pub username: String,
-    pub password: String,
-}
+use pcupback::{DBErrorKind::InsertError, Storable};
 
 const SESSION_TIMEOUT: TimeDelta = TimeDelta::days(1);
 
@@ -69,7 +30,7 @@ async fn validate_session<'a>(
     executor: impl Executor<'a, Database = Sqlite>,
     session: Result<DBUserSession, sqlx::Error>,
     new_id: u32,
-) -> Result<UserSession, AuthError> {
+) -> AuthResult {
     if let Ok(session) = session {
         // if `last_set` was more than `SESSION_TIMEOUT` ago, we create a new session.
         let session_last_set = session.last_set_datetime();
@@ -95,9 +56,8 @@ async fn validate_session<'a>(
 async fn generate_store_session(
     executor: impl Executor<'_, Database = Sqlite>,
     user_id: u32,
-) -> Result<UserSession, AuthError> {
+) -> AuthResult {
     use AuthError::DBError;
-    use DBErrorKind::StoreError;
 
     let session = DBUserSession::generate(user_id);
     match session.store(executor).await {
@@ -105,20 +65,23 @@ async fn generate_store_session(
         Ok(_) => Ok(session.into()),
         Err(err) => {
             tracing::error!("failed to store session: {err:?}");
-            Err(DBError(StoreError(err.to_string())))
+            Err(DBError(InsertError(err.to_string())))
         }
     }
 }
+
+type AuthResult = Result<UserSession, AuthError>;
 
 #[post("/auth", data = "<request>")]
 pub async fn authenticate(
     db: &State<Pool<Sqlite>>,
     request: Json<AuthRequest>,
-) -> Json<Result<UserSession, AuthError>> {
+) -> Json<AuthResult> {
     use AuthError::{DBError, HashError, InternalError, InvalidPassword, WrongPassword};
-    use DBErrorKind::StoreError;
-    use HashErrorKind::ParseError;
-    use InvalidPasswordKind::{NotEnoughChars, TooManyChars};
+    use data::public::{
+        HashErrorKind::ParseError, InvalidPasswordKind::TooFewChars,
+        InvalidPasswordKind::TooManyChars,
+    };
 
     // we have &State<Pool<Sqlite>>.
     // deref &State<..> => State<..>
@@ -140,7 +103,7 @@ pub async fn authenticate(
         .fetch_one(db)
         .await;
 
-    let session: Result<UserSession, AuthError> = match existing_user {
+    let session: AuthResult = match existing_user {
         // the user requested exists, lets check if the request password hash matches:
         Ok(existing_user) => {
             tracing::info!("got auth request for existing user.");
@@ -188,7 +151,7 @@ pub async fn authenticate(
 
             if request.password.len() < 8 {
                 tracing::info!("password chars < 8");
-                Err(InvalidPassword(NotEnoughChars))
+                Err(InvalidPassword(TooFewChars))
             } else if request.password.len() > 64 {
                 tracing::info!("password chars > 64");
                 Err(InvalidPassword(TooManyChars))
@@ -210,7 +173,7 @@ pub async fn authenticate(
                         // store the user in db
                         if let Err(err) = new_user.store(db).await {
                             tracing::error!("failed to store user: {err:?}");
-                            Err(DBError(StoreError(err.to_string())))
+                            Err(DBError(InsertError(err.to_string())))
                         } else {
                             // create and store the session
                             generate_store_session(db, new_user.id).await
