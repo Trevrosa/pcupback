@@ -62,39 +62,39 @@ async fn too_many_chars() {
     ));
 }
 
+// FIXME: fix rocket tests with multiple requests
 #[rocket::async_test]
 async fn login() {
     let client = Client::tracked(crate::rocket().await).await.unwrap();
 
     let req = AuthRequest {
         username: Uuid::new_v4().to_string(),
-        password: "1".repeat(8),
+        password: "12345678".to_string(),
     };
 
-    let resp = client
+    let resp1 = client
         .post("/auth")
         .header(ContentType::JSON)
         .body(json::to_string(&req).unwrap())
         .dispatch()
-        .await;
+        .await
+        .into_json::<AuthResult>()
+        .await
+        .unwrap();
 
-    assert_eq!(resp.status(), Status::Ok);
-    let resp_json: AuthResult = resp.into_json().await.unwrap();
+    let session1 = resp1.unwrap();
 
-    let first_session = resp_json.unwrap().id;
-
-    let resp = client
+    let resp2 = client
         .post("/auth")
         .header(ContentType::JSON)
         .body(json::to_string(&req).unwrap())
         .dispatch()
-        .await;
+        .await
+        .into_json::<AuthResult>()
+        .await
+        .unwrap();
 
-    assert_eq!(resp.status(), Status::Ok);
+    let session2 = resp2.unwrap();
 
-    let resp2_json: AuthResult = resp.into_json().await.unwrap();
-
-    let second_session = resp2_json.unwrap().id;
-
-    assert_eq!(first_session, second_session);
+    assert_eq!(session1, session2);
 }

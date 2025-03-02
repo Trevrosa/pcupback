@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use pcupback::{DBErrorKind, Fetchable};
 use serde::{Deserialize, Serialize};
-use sqlx::{Encode, Executor, Sqlite, Type};
+use sqlx::{Executor, Sqlite};
 use thiserror::Error;
 
 use super::private::DBAppInfo;
@@ -12,17 +12,14 @@ pub struct UserData {
     pub app_usage: Vec<AppInfo>,
 }
 
-impl<'a> Fetchable<'a> for UserData {
+impl<'a> Fetchable<'a, u32> for UserData {
     type DB = Sqlite;
 
-    async fn fetch<E, F>(filter: F, executor: E) -> Result<Self, sqlx::Error>
+    async fn fetch_one<E>(filter: u32, executor: E) -> Result<Self, sqlx::Error>
     where
         E: Executor<'a, Database = Self::DB>,
-        F: Encode<'a, Self::DB> + Type<Self::DB> + 'a,
     {
-        let app_usage: Vec<AppInfo> = sqlx::query_as("SELECT * FROM app_info WHERE user_id = ?")
-            .bind(filter)
-            .fetch_all(executor)
+        let app_usage: Vec<AppInfo> = DBAppInfo::fetch_all(filter, executor)
             .await?
             .into_iter()
             .map(|a: DBAppInfo| a.into())
@@ -32,15 +29,24 @@ impl<'a> Fetchable<'a> for UserData {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct AppInfo {
     pub name: String,
-    usage: u32,
+    pub(super) usage: u32,
+    pub(super) limit: u32,
 }
 
 impl AppInfo {
     pub fn usage(&self) -> Duration {
-        Duration::from_secs(self.usage as u64)
+        Duration::from_secs(u64::from(self.usage))
+    }
+}
+
+impl PartialEq<DBAppInfo> for &AppInfo {
+    fn eq(&self, other: &DBAppInfo) -> bool {
+        self.name == other.app_name
+            && self.usage == other.app_usage
+            && self.limit == other.app_limit
     }
 }
 
@@ -49,6 +55,7 @@ impl From<DBAppInfo> for AppInfo {
         Self {
             name: value.app_name,
             usage: value.app_usage,
+            limit: value.app_usage,
         }
     }
 }
@@ -73,7 +80,7 @@ mod tests {
         let app_info = DBAppInfo::new(1, "xddapp", 1, 0);
         app_info.store(&db).await.unwrap();
 
-        let data = UserData::fetch(1, &db).await.unwrap();
+        let data = UserData::fetch_one(1, &db).await.unwrap();
         assert_eq!(data.app_usage.len(), 1);
         assert_eq!(data.app_usage[0].name, app_info.app_name);
         assert_eq!(data.app_usage[0].usage, app_info.app_usage);

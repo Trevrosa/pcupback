@@ -3,13 +3,13 @@ use argon2::{
     password_hash::{SaltString, rand_core::OsRng},
 };
 use chrono::{DateTime, Utc};
-use pcupback::Storable;
+use pcupback::{Fetchable, Storable};
 use sqlx::{Executor, FromRow, Sqlite, sqlite::SqliteQueryResult};
 use uuid::Uuid;
 
 use super::public::HashErrorKind::{self, CreateError};
 
-#[derive(Debug, FromRow)]
+#[derive(Debug, FromRow, PartialEq, Eq)]
 pub struct DBUser {
     pub id: u32,
     pub username: String,
@@ -66,7 +66,37 @@ impl<'a> Storable<'a> for DBUser {
     }
 }
 
-#[derive(Debug, FromRow)]
+impl<'a> Fetchable<'a, &'a str> for DBUser {
+    type DB = Sqlite;
+
+    /// username filter
+    async fn fetch_one<E>(filter: &str, executor: E) -> Result<Self, sqlx::Error>
+    where
+        E: Executor<'a, Database = Self::DB>,
+    {
+        sqlx::query_as("SELECT * FROM users WHERE username = ?")
+            .bind(filter)
+            .fetch_one(executor)
+            .await
+    }
+}
+
+impl<'a> Fetchable<'a, u32> for DBUser {
+    type DB = Sqlite;
+
+    /// user id filter
+    async fn fetch_one<E>(filter: u32, executor: E) -> Result<Self, sqlx::Error>
+    where
+        E: Executor<'a, Database = Self::DB>,
+    {
+        sqlx::query_as("SELECT * FROM users WHERE id = ?")
+            .bind(filter)
+            .fetch_one(executor)
+            .await
+    }
+}
+
+#[derive(Debug, FromRow, PartialEq, Eq)]
 pub struct DBUserSession {
     pub user_id: u32,
     pub id: String,
@@ -111,7 +141,8 @@ impl<'a> Storable<'a> for DBUserSession {
 
 #[cfg(test)]
 mod tests {
-    use sqlx::{Sqlite, pool::Pool};
+    use pcupback::Fetchable;
+    use sqlx::{Error, Sqlite, pool::Pool};
 
     use crate::routes::auth::data::private::{DBUser, Storable};
 
@@ -119,8 +150,7 @@ mod tests {
 
     #[sqlx::test]
     async fn store_session(db: Pool<Sqlite>) {
-        let session = DBUserSession::generate(1);
-        session.store(&db).await.unwrap();
+        DBUserSession::generate(1).store(&db).await.unwrap();
     }
 
     #[test]
@@ -130,7 +160,31 @@ mod tests {
 
     #[sqlx::test]
     async fn store_user(db: Pool<Sqlite>) {
-        let user = DBUser::new(1, "test", "12345678").unwrap();
-        user.store(&db).await.unwrap();
+        DBUser::new(1, "test", "12345678")
+            .unwrap()
+            .store(&db)
+            .await
+            .unwrap();
+    }
+
+    #[sqlx::test]
+    async fn fetch_user_id(db: Pool<Sqlite>) {
+        let stored = DBUser::new(1, "test", "12345678").unwrap();
+        stored.store(&db).await.unwrap();
+        let fetched = DBUser::fetch_one(1, &db).await.unwrap();
+
+        assert_eq!(fetched, stored)
+    }
+
+    #[sqlx::test]
+    async fn fetch_user_name(db: Pool<Sqlite>) {
+        let stored = DBUser::new(1, "test", "12345678").unwrap();
+        stored.store(&db).await.unwrap();
+        let fetched = DBUser::fetch_one("test", &db).await.unwrap();
+
+        assert_eq!(fetched, stored);
+
+        let not_exists = DBUser::fetch_one("testdd", &db).await;
+        assert!(matches!(not_exists.unwrap_err(), Error::RowNotFound))
     }
 }

@@ -5,7 +5,7 @@ use pcupback::DBErrorKind;
 
 use super::private::DBUserSession;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserSession {
     pub user_id: u32,
     pub id: String,

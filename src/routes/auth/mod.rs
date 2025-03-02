@@ -15,9 +15,9 @@ use rocket::{
     serde::json::{self, Json},
 };
 use sqlx::{Executor, Pool, Sqlite};
-use tracing::{Level, span};
+use tracing::instrument;
 
-use pcupback::{DBErrorKind::InsertError, Storable};
+use pcupback::{DBErrorKind::InsertError, Fetchable, Storable};
 
 const SESSION_TIMEOUT: TimeDelta = TimeDelta::days(1);
 
@@ -70,8 +70,9 @@ async fn generate_store_session(
     }
 }
 
-type AuthResult = Result<UserSession, AuthError>;
+pub type AuthResult = Result<UserSession, AuthError>;
 
+#[instrument(skip_all)]
 #[post("/auth", data = "<request>")]
 pub async fn authenticate(
     db: &State<Pool<Sqlite>>,
@@ -90,18 +91,11 @@ pub async fn authenticate(
     // we end up with &Pool<Sqlite>
     let db = &**db;
 
-    // FIXME: use the alternatives shown in macro doc below
-    let my_span = span!(Level::INFO, "authenticate");
-    let _enter = my_span.enter();
-
     let req_username = request.username.trim();
 
     // check the database for a user with the same username requested.
     // get it if it exists.
-    let existing_user: Result<DBUser, _> = sqlx::query_as("SELECT * FROM users WHERE username = ?")
-        .bind(req_username)
-        .fetch_one(db)
-        .await;
+    let existing_user: Result<DBUser, _> = DBUser::fetch_one(req_username, db).await;
 
     let session: AuthResult = match existing_user {
         // the user requested exists, lets check if the request password hash matches:

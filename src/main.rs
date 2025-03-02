@@ -2,8 +2,9 @@ mod routes;
 
 use rocket::{Build, Rocket, get, routes};
 use routes::{auth::authenticate, sync::sync};
-use sqlx::{SqlitePool, migrate, sqlite::SqliteConnectOptions};
+use sqlx::{Pool, Sqlite, migrate, pool::PoolOptions, sqlite::SqliteConnectOptions};
 use tracing::level_filters::LevelFilter;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[get("/")]
 fn index<'a>() -> &'a str {
@@ -24,11 +25,15 @@ async fn rocket() -> Rocket<Build> {
     let db_options = SqliteConnectOptions::new()
         .filename(DB_PATH)
         .create_if_missing(true);
-    let db_pool = SqlitePool::connect_with(db_options)
+    let db_pool: Pool<Sqlite> = PoolOptions::new()
+        .min_connections(1)
+        .max_connections(5)
+        .connect_with(db_options)
         .await
         .expect("could not open db");
 
     // do db migrations. (from the `./migrations` dir)
+    tracing::debug!("running migrations..");
     let migrator = migrate!();
     migrator
         .run(&db_pool)
@@ -42,10 +47,17 @@ async fn rocket() -> Rocket<Build> {
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
-    // FIXME: do we need tracing?
-    // TODO: see tracing-journald
-    // FIXME: see if we can change the ugly "rocket::launch::_:".
-    tracing_subscriber::fmt().with_max_level(LOG_LEVEL).init();
+    // TODO: see if we can change the ugly "rocket::launch::_:".
+    if let Ok(journald) = tracing_journald::layer() {
+        println!("activated journald tracing layer");
+        tracing_subscriber::registry().with(journald).init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_max_level(LOG_LEVEL)
+            .compact()
+            .init();
+    }
+
     rocket().await.launch().await.unwrap();
 
     Ok(())
