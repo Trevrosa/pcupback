@@ -62,21 +62,25 @@ type CompactFmtLayer = fmt::Layer<Registry, DefaultFields, Format<Compact>>;
 
 /// Set the global logger. journald if available, else `fmt`.
 fn set_tracing(fmt: reload::Layer<CompactFmtLayer, Registry>) {
+    /// Filters `log level` by [`crate::LOG_LEVEL`]
+    struct Filter;
+    impl layer::Filter<Registry> for Filter {
+        fn enabled(
+            &self,
+            meta: &tracing::Metadata<'_>,
+            _ctx: &layer::Context<'_, Registry>,
+        ) -> bool {
+            meta.level() <= &LOG_LEVEL
+        }
+    }
+
     if let Ok(journald) = tracing_journald::layer() {
         println!("activated journald tracing layer");
-        tracing_subscriber::registry().with(journald).init();
+        tracing_subscriber::registry()
+            .with(journald.with_filter(Filter))
+            .init();
     } else {
-        /// Filters `log level` by [`crate::LOG_LEVEL`]
-        struct Filter;
-        impl layer::Filter<Registry> for Filter {
-            fn enabled(
-                &self,
-                meta: &tracing::Metadata<'_>,
-                _ctx: &layer::Context<'_, Registry>,
-            ) -> bool {
-                meta.level() <= &LOG_LEVEL
-            }
-        }
+        // TODO: try tokio-cconsole subscriber on debug.
         tracing_subscriber::registry()
             .with(fmt.with_filter(Filter))
             .init();
@@ -89,16 +93,16 @@ async fn main() -> Result<(), rocket::Error> {
     let fmt_default = || fmt::layer().compact();
     let (fmt, fmt_reload) = reload::Layer::new(fmt_default());
     set_tracing(fmt);
-    
-    let built = rocket().await;
-    
+
+    let rocket = rocket().await;
+
     // we then hide log `target`s for the initial launch messages.
     fmt_reload
         .modify(|fmt| *fmt = fmt::layer().with_target(false).compact())
         .unwrap();
 
-    built
-        .attach(AdHoc::on_liftoff("Tracing Subscriber", move |_| {
+    rocket
+        .attach(AdHoc::on_liftoff("Tracing", move |_| {
             Box::pin(async move {
                 // we now change it back
                 fmt_reload.modify(|fmt| *fmt = fmt_default()).unwrap();
