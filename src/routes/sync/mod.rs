@@ -18,11 +18,11 @@ type SyncResult = Result<UserData, SyncError>;
 /// find the diff of the client state and stored state,
 /// and return the final, combined state.  
 #[instrument(skip_all)]
-#[post("/sync/<session>", data = "<user_data>")]
+#[post("/sync/<session>", data = "<request_user_data>")]
 pub async fn sync(
     db: &State<Pool<Sqlite>>,
     session: String,
-    user_data: Json<Option<UserData>>,
+    request_user_data: Json<Option<UserData>>,
 ) -> Json<SyncResult> {
     use data::public::SyncError::*;
     use pcupback::DBErrorKind::*;
@@ -55,7 +55,7 @@ pub async fn sync(
     };
 
     // check for `app`s that arent in `stored_app_info`.
-    if let Json(Some(user_data)) = user_data {
+    if let Json(Some(user_data)) = request_user_data {
         for app in &user_data.app_usage {
             if stored_app_info.iter().any(|s| s.eq(app)) {
                 // `stored_app_info` conatins `app`

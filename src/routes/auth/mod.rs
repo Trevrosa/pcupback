@@ -140,8 +140,8 @@ pub async fn authenticate(
             }
         }
         // the requested user doesnt exist. lets try to create a new account:
-        Err(_err) => {
-            tracing::info!("no existing user, creating new account: {_err:?}");
+        Err(err) => {
+            tracing::info!("no existing user {} ({err:?}), creating new account", request.username);
 
             if request.password.len() < 8 {
                 tracing::info!("password chars < 8");

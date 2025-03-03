@@ -42,14 +42,6 @@ impl AppInfo {
     }
 }
 
-impl PartialEq<DBAppInfo> for &AppInfo {
-    fn eq(&self, other: &DBAppInfo) -> bool {
-        self.name == other.app_name
-            && self.usage == other.app_usage
-            && self.limit == other.app_limit
-    }
-}
-
 impl From<DBAppInfo> for AppInfo {
     fn from(value: DBAppInfo) -> Self {
         Self {
