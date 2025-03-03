@@ -172,6 +172,20 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn store_user_auto(db: Pool<Sqlite>) {
+        let user = DBUser::new_store("test", "12345678").unwrap();
+        user.store(&db)
+            .await
+            .unwrap();
+        user.store(&db)
+            .await
+            .unwrap();
+
+        DBUser::fetch_one(1, &db).await.unwrap();
+        DBUser::fetch_one(2, &db).await.unwrap();
+    }
+
+    #[sqlx::test]
     async fn fetch_user_id(db: Pool<Sqlite>) {
         let stored = DBUser::new(1, "test", "12345678").unwrap();
         stored.store(&db).await.unwrap();
