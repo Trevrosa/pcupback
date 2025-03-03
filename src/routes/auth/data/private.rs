@@ -38,6 +38,10 @@ impl DBUser {
         })
     }
 
+    pub fn new_store(username: impl Into<String>, password: impl AsRef<str>) -> Result<Self, HashErrorKind> {
+        Self::new(0, username, password)
+    }
+
     #[allow(unused)]
     pub fn with_hashed(id: u32, username: impl Into<String>, hashed: &PasswordHash) -> Self {
         let password_hash = hashed.to_string();
@@ -57,8 +61,8 @@ impl<'a> Storable<'a> for DBUser {
     where
         E: Executor<'a, Database = Self::DB>,
     {
-        sqlx::query("INSERT INTO users(id, username, password_hash) VALUES(?, ?, ?)")
-            .bind(self.id)
+        sqlx::query("INSERT INTO users(username, password_hash) VALUES(?, ?)")
+            // .bind(self.id)
             .bind(self.username.clone())
             .bind(self.password_hash.clone())
             .execute(executor)

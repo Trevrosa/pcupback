@@ -151,16 +151,16 @@ pub async fn authenticate(
                 Err(InvalidPassword(TooManyChars))
             } else {
                 // get the largest id in db, or 0 if there are no users.
-                let last_id = sqlx::query_as::<_, (u32,)>("SELECT id FROM users ORDER BY id DESC")
-                    .fetch_one(db)
-                    .await
-                    // unwrap the tuple
-                    .map(|v| v.0)
-                    // 0 is default
-                    .unwrap_or(0);
-
+                // let last_id = sqlx::query_as::<_, (u32,)>("SELECT id FROM users ORDER BY id DESC")
+                //     .fetch_one(db)
+                //     .await
+                //     // unwrap the tuple
+                //     .map(|v| v.0)
+                //     // 0 is default
+                //     .unwrap_or(0);
+  
                 // we add 1 to get the next id.
-                let new_user = DBUser::new(last_id + 1, req_username, &request.password);
+                let new_user = DBUser::new_store(req_username, &request.password);
 
                 match new_user {
                     Ok(new_user) => {

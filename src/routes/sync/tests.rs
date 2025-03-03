@@ -8,7 +8,7 @@ use crate::routes::{
 
 use super::data::public::UserData;
 
-// FIXME: fix rocket tests with multiple requests
+// FIXME: fix rocket tests.
 #[rocket::async_test]
 async fn dry_sync() {
     let client = Client::tracked(crate::rocket().await).await.unwrap();

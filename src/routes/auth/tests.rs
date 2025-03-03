@@ -62,7 +62,7 @@ async fn too_many_chars() {
     ));
 }
 
-// FIXME: fix rocket tests with multiple requests
+// FIXME: fix this test
 #[rocket::async_test]
 async fn login() {
     let client = Client::tracked(crate::rocket().await).await.unwrap();
