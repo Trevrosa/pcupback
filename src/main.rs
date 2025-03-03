@@ -1,4 +1,7 @@
 mod routes;
+/// Test the database schema.
+#[cfg(test)]
+mod schema_test;
 
 use rocket::{Build, Rocket, fairing::AdHoc, get, routes};
 use routes::{auth::authenticate, sync::sync};
@@ -75,37 +78,55 @@ fn set_tracing(fmt: reload::Layer<CompactFmtLayer, Registry>) {
     }
 
     if let Ok(journald) = tracing_journald::layer() {
-        println!("activated journald tracing layer");
         tracing_subscriber::registry()
             .with(journald.with_filter(Filter))
             .init();
+        println!("activated tracing-journald layer");
     } else {
-        // TODO: try tokio-cconsole subscriber on debug.
-        tracing_subscriber::registry()
-            .with(fmt.with_filter(Filter))
-            .init();
+        // on debug build, or on feature tokio-console.
+        if cfg!(debug_assertions) || cfg!(feature = "tokio-console") {
+            // enable debugging with tokio-console
+            tracing_subscriber::registry()
+                .with(console_subscriber::spawn())
+                // we ignore fmt and filter if we are debugging.
+                .with(fmt_default())
+                .init();
+            println!("init'd console-subscriber layer");
+        } else {
+            tracing_subscriber::registry()
+                .with(fmt.with_filter(Filter))
+                .init();
+        }
     }
+}
+
+// this is our default fmt.
+fn fmt_default<T>() -> fmt::Layer<T, DefaultFields, Format<Compact>> {
+    fmt::layer().compact()
 }
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
-    // this is our default fmt.
-    let fmt_default = || fmt::layer().compact();
+    // wrap the fmt in a reload::Layer
     let (fmt, fmt_reload) = reload::Layer::new(fmt_default());
     set_tracing(fmt);
 
     let rocket = rocket().await;
 
     // we then hide log `target`s for the initial launch messages.
-    fmt_reload
-        .modify(|fmt| *fmt = fmt::layer().with_target(false).compact())
-        .unwrap();
+    let reload = fmt_reload.modify(|fmt| *fmt = fmt::layer().with_target(false).compact());
+    if reload.is_err() {
+        eprintln!("failed to change fmt");
+    }
 
     rocket
         .attach(AdHoc::on_liftoff("Tracing", move |_| {
             Box::pin(async move {
                 // we now change it back
-                fmt_reload.modify(|fmt| *fmt = fmt_default()).unwrap();
+                let reload = fmt_reload.modify(|fmt| *fmt = fmt_default());
+                if reload.is_err() {
+                    eprintln!("failed to change fmt");
+                }
             })
         }))
         .launch()

@@ -36,7 +36,7 @@ where
     /// The database the implementor is [`Fetchable`] for.
     type DB: Database;
 
-    /// Fetch one [`Self`] from the [`Self::DB`] database, using `filter` to filter.
+    /// Fetch one Self from the [`Self::DB`] database, using `filter` to filter.
     ///
     /// # Errors
     ///
@@ -45,7 +45,7 @@ where
     where
         E: Executor<'a, Database = Self::DB>;
 
-    /// Fetch all [`Self`] from the [`Self::DB`] database, using `filter` to filter.
+    /// Fetch all Self from the [`Self::DB`] database, using `filter` to filter.
     ///
     /// The default implementation creates a one-item [`Vec`] filled by [`Self::fetch_one`]
     ///
@@ -66,4 +66,6 @@ pub enum DBErrorKind {
     InsertError(String),
     #[error("SelectError")]
     SelectError(String),
+    #[error("OtherError")]
+    OtherError(String),
 }

@@ -17,7 +17,10 @@ use rocket::{
 use sqlx::{Executor, Pool, Sqlite};
 use tracing::instrument;
 
-use pcupback::{DBErrorKind::InsertError, Fetchable, Storable};
+use pcupback::{
+    DBErrorKind::{InsertError, OtherError},
+    Fetchable, Storable,
+};
 
 const SESSION_TIMEOUT: TimeDelta = TimeDelta::days(1);
 
@@ -100,7 +103,7 @@ pub async fn authenticate(
     let session: AuthResult = match existing_user {
         // the user requested exists, lets check if the request password hash matches:
         Ok(existing_user) => {
-            tracing::info!("got auth request for existing user.");
+            tracing::info!("got auth request for existing user {req_username}.");
 
             let parse_existing_hash = PasswordHash::new(&existing_user.password_hash);
             let parse_and_validate = parse_existing_hash
@@ -141,7 +144,10 @@ pub async fn authenticate(
         }
         // the requested user doesnt exist. lets try to create a new account:
         Err(err) => {
-            tracing::info!("no existing user {} ({err:?}), creating new account", request.username);
+            tracing::info!(
+                "no existing user {} ({err:?}), creating new account",
+                request.username
+            );
 
             if request.password.len() < 8 {
                 tracing::info!("password chars < 8");
@@ -150,17 +156,28 @@ pub async fn authenticate(
                 tracing::info!("password chars > 64");
                 Err(InvalidPassword(TooManyChars))
             } else {
-                // get the largest id in db, or 0 if there are no users.
-                // let last_id = sqlx::query_as::<_, (u32,)>("SELECT id FROM users ORDER BY id DESC")
-                //     .fetch_one(db)
-                //     .await
-                //     // unwrap the tuple
-                //     .map(|v| v.0)
-                //     // 0 is default
-                //     .unwrap_or(0);
-  
+                let transaction = db
+                    .begin()
+                    .await
+                    .map_err(|e| DBError(OtherError(e.to_string())));
+
+                // FIXME: see if this makes the queries atomic. ie. we will execute them starting at the same time.
+                let mut transaction = match transaction {
+                    Ok(t) => t,
+                    Err(err) => return Json(Err(err)),
+                };
+
+                // get the largest id in db, or 0 if not found.
+                let max_id = sqlx::query_as::<_, (u32,)>("SELECT MAX(id) FROM users")
+                    .fetch_one(&mut *transaction)
+                    .await
+                    // unwrap the tuple
+                    .map(|v| v.0)
+                    // 0 is default
+                    .unwrap_or(0);
+
                 // we add 1 to get the next id.
-                let new_user = DBUser::new_store(req_username, &request.password);
+                let new_user = DBUser::new(max_id + 1, req_username, &request.password);
 
                 match new_user {
                     Ok(new_user) => {
@@ -170,7 +187,12 @@ pub async fn authenticate(
                             Err(DBError(InsertError(err.to_string())))
                         } else {
                             // create and store the session
-                            generate_store_session(db, new_user.id).await
+                            let session =
+                                generate_store_session(&mut *transaction, new_user.id).await;
+                            if let Err(err) = transaction.commit().await {
+                                return Json(Err(DBError(OtherError(err.to_string()))));
+                            }
+                            session
                         }
                     }
                     Err(err) => {
@@ -181,6 +203,10 @@ pub async fn authenticate(
             }
         }
     };
+    tracing::info!(
+        "created with user id: {:?}",
+        session.as_ref().map(|a| a.user_id)
+    );
 
     tracing::debug!(
         "json response: {}",

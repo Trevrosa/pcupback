@@ -48,13 +48,13 @@ impl<'a> Storable<'a> for DBAppInfo {
     where
         E: Executor<'a, Database = Self::DB>,
     {
-        sqlx::query(
+        sqlx::query!(
             "INSERT INTO app_info(user_id, app_name, app_usage, app_limit) VALUES(?, ?, ?, ?)",
+            self.user_id,
+            self.app_name,
+            self.app_usage,
+            self.app_limit
         )
-        .bind(self.user_id)
-        .bind(&self.app_name)
-        .bind(self.app_usage)
-        .bind(self.app_limit)
         .execute(executor)
         .await
     }

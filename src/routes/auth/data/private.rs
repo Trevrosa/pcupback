@@ -38,8 +38,12 @@ impl DBUser {
         })
     }
 
-    pub fn new_store(username: impl Into<String>, password: impl AsRef<str>) -> Result<Self, HashErrorKind> {
-        Self::new(0, username, password)
+    pub fn new_raw(id: u32, username: impl Into<String>, password: impl Into<String>) -> Self {
+        Self {
+            id,
+            username: username.into(),
+            password_hash: password.into(),
+        }
     }
 
     #[allow(unused)]
@@ -61,12 +65,15 @@ impl<'a> Storable<'a> for DBUser {
     where
         E: Executor<'a, Database = Self::DB>,
     {
-        sqlx::query("INSERT INTO users(username, password_hash) VALUES(?, ?)")
-            // .bind(self.id)
-            .bind(self.username.clone())
-            .bind(self.password_hash.clone())
-            .execute(executor)
-            .await
+        sqlx::query!(
+            "INSERT INTO users(id, username, password_hash) VALUES(?, ?, ?)",
+            self.id,
+            self.username,
+            self.password_hash
+        )
+        // .bind(self.id)
+        .execute(executor)
+        .await
     }
 }
 
@@ -134,12 +141,14 @@ impl<'a> Storable<'a> for DBUserSession {
     where
         E: Executor<'a, Database = Self::DB>,
     {
-        sqlx::query("INSERT OR REPLACE INTO sessions(user_id, id, last_set) VALUES(?, ?, ?)")
-            .bind(self.user_id)
-            .bind(&self.id)
-            .bind(self.last_set)
-            .execute(executor)
-            .await
+        sqlx::query!(
+            "INSERT OR REPLACE INTO sessions(user_id, id, last_set) VALUES(?, ?, ?)",
+            self.user_id,
+            self.id,
+            self.last_set
+        )
+        .execute(executor)
+        .await
     }
 }
 
@@ -154,7 +163,11 @@ mod tests {
 
     #[sqlx::test]
     async fn store_session(db: Pool<Sqlite>) {
-        DBUserSession::generate(1).store(&db).await.unwrap();
+        // no such user_id 1
+        assert!(DBUserSession::generate(1).store(&db).await.is_err());
+        DBUser::new_raw(1, "1", "1").store(&db).await.unwrap();
+        // user_id 1 now exists:
+        assert!(DBUserSession::generate(1).store(&db).await.is_ok());
     }
 
     #[test]
@@ -169,20 +182,6 @@ mod tests {
             .store(&db)
             .await
             .unwrap();
-    }
-
-    #[sqlx::test]
-    async fn store_user_auto(db: Pool<Sqlite>) {
-        let user = DBUser::new_store("test", "12345678").unwrap();
-        user.store(&db)
-            .await
-            .unwrap();
-        user.store(&db)
-            .await
-            .unwrap();
-
-        DBUser::fetch_one(1, &db).await.unwrap();
-        DBUser::fetch_one(2, &db).await.unwrap();
     }
 
     #[sqlx::test]

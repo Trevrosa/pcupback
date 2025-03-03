@@ -1,3 +1,11 @@
+# build artifacts
 /target
+
+# db files
 /*.db
+
+# db tmp files
+/*.db-*
+
+# sqlx dir
 /.sqlx
