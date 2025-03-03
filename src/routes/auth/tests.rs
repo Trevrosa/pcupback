@@ -14,7 +14,7 @@ use super::{
 async fn not_enough_chars() {
     use super::data::public::InvalidPasswordKind::TooFewChars;
 
-    let client = Client::tracked(crate::rocket().await).await.unwrap();
+    let client = Client::tracked(crate::test_rocket().await).await.unwrap();
 
     let req = AuthRequest {
         username: Uuid::new_v4().to_string(),
@@ -40,7 +40,7 @@ async fn not_enough_chars() {
 async fn too_many_chars() {
     use super::data::public::InvalidPasswordKind::TooManyChars;
 
-    let client = Client::tracked(crate::rocket().await).await.unwrap();
+    let client = Client::tracked(crate::test_rocket().await).await.unwrap();
 
     let req = AuthRequest {
         username: Uuid::new_v4().to_string(),
@@ -65,7 +65,7 @@ async fn too_many_chars() {
 // FIXME: fix rocket tests with multiple requests
 #[rocket::async_test]
 async fn login() {
-    let client = Client::tracked(crate::rocket().await).await.unwrap();
+    let client = Client::tracked(crate::test_rocket().await).await.unwrap();
 
     let req = AuthRequest {
         username: Uuid::new_v4().to_string(),

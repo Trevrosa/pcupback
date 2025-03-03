@@ -11,7 +11,7 @@ use super::data::public::UserData;
 // FIXME: fix rocket tests with multiple requests
 #[rocket::async_test]
 async fn dry_sync() {
-    let client = Client::tracked(crate::rocket().await).await.unwrap();
+    let client = Client::tracked(crate::test_rocket().await).await.unwrap();
 
     let user = AuthRequest {
         username: Uuid::new_v4().to_string(),

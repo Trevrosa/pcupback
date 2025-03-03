@@ -1,27 +1,41 @@
 mod routes;
 
-use rocket::{Build, Rocket, get, routes};
+use rocket::{Build, Rocket, fairing::AdHoc, get, routes};
 use routes::{auth::authenticate, sync::sync};
 use sqlx::{Pool, Sqlite, migrate, pool::PoolOptions, sqlite::SqliteConnectOptions};
-use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{
+    Registry,
+    fmt::{
+        self,
+        format::{Compact, DefaultFields, Format},
+    },
+    layer::SubscriberExt,
+    reload,
+    util::SubscriberInitExt,
+};
 
 #[get("/")]
 fn index<'a>() -> &'a str {
     "Hello, World!"
 }
 
-#[cfg(not(debug_assertions))]
-const LOG_LEVEL: LevelFilter = LevelFilter::INFO;
-#[cfg(debug_assertions)]
-const LOG_LEVEL: LevelFilter = LevelFilter::DEBUG;
+// #[cfg(not(debug_assertions))]
+// const LOG_LEVEL: LevelFilter = LevelFilter::INFO;
+// #[cfg(debug_assertions)]
+// const LOG_LEVEL: LevelFilter = LevelFilter::DEBUG;
 
 #[cfg(not(test))]
 const DB_PATH: &str = "xdd.db";
 #[cfg(test)]
 const DB_PATH: &str = "test.db";
 
-async fn rocket() -> Rocket<Build> {
+/// No fmt reload handle.
+#[allow(unused)]
+fn test_rocket() -> impl Future<Output = Rocket<Build>> {
+    crate::rocket(None)
+}
+
+async fn rocket(fmt_reload: Option<&CompactFmtLayerHandle>) -> Rocket<Build> {
     let db_options = SqliteConnectOptions::new()
         .filename(DB_PATH)
         .create_if_missing(true);
@@ -40,25 +54,50 @@ async fn rocket() -> Rocket<Build> {
         .await
         .expect("could not run migrations");
 
+    // TODO: change this to hide the "rocket::launch::_:"
+    if let Some(fmt_reload) = fmt_reload {
+        fmt_reload
+            .modify(|fmt| *fmt = fmt::layer().with_level(false).compact())
+            .unwrap();
+    }
+
     rocket::build()
         .manage(db_pool)
         .mount("/", routes![index, authenticate, sync])
 }
 
-#[rocket::main]
-async fn main() -> Result<(), rocket::Error> {
-    // TODO: see if we can change the ugly "rocket::launch::_:".
+type CompactFmtLayer = fmt::Layer<Registry, DefaultFields, Format<Compact>>;
+type CompactFmtLayerHandle = reload::Handle<CompactFmtLayer, Registry>;
+type CompactFmtLayerReload = reload::Layer<CompactFmtLayer, Registry>;
+
+fn set_tracing(fmt: CompactFmtLayerReload) {
     if let Ok(journald) = tracing_journald::layer() {
         println!("activated journald tracing layer");
         tracing_subscriber::registry().with(journald).init();
     } else {
-        tracing_subscriber::fmt()
-            .with_max_level(LOG_LEVEL)
-            .compact()
-            .init();
+        tracing_subscriber::registry().with(fmt).init();
     }
+}
 
-    rocket().await.launch().await.unwrap();
+#[rocket::main]
+async fn main() -> Result<(), rocket::Error> {
+    // we initally have compact logs
+    let fmt_default = || fmt::layer().compact();
+    let (fmt, fmt_reload) = reload::Layer::new(fmt_default());
+    set_tracing(fmt);
+
+    // the rocket function then modifies the fmt
+    rocket(Some(&fmt_reload))
+        .await
+        .attach(AdHoc::on_liftoff("Tracing Subscriber", move |_| {
+            Box::pin(async move {
+                // we now change it back
+                fmt_reload.modify(|fmt| *fmt = fmt_default()).unwrap();
+            })
+        }))
+        .launch()
+        .await
+        .unwrap();
 
     Ok(())
 }
