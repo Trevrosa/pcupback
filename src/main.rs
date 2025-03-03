@@ -20,13 +20,17 @@ fn index<'a>() -> &'a str {
     "Hello, World!"
 }
 
+/// The max log level.
 #[cfg(not(debug_assertions))]
 const LOG_LEVEL: LevelFilter = LevelFilter::INFO;
+/// The max log level.
 #[cfg(debug_assertions)]
 const LOG_LEVEL: LevelFilter = LevelFilter::DEBUG;
 
+/// The path to database.
 #[cfg(not(test))]
 const DB_PATH: &str = "xdd.db";
+/// The path to database.
 #[cfg(test)]
 const DB_PATH: &str = "test.db";
 
@@ -56,11 +60,13 @@ async fn rocket() -> Rocket<Build> {
 
 type CompactFmtLayer = fmt::Layer<Registry, DefaultFields, Format<Compact>>;
 
+/// Set the global logger. journald if available, else `fmt`.
 fn set_tracing(fmt: reload::Layer<CompactFmtLayer, Registry>) {
     if let Ok(journald) = tracing_journald::layer() {
         println!("activated journald tracing layer");
         tracing_subscriber::registry().with(journald).init();
     } else {
+        /// Filters `log level` by [`crate::LOG_LEVEL`]
         struct Filter;
         impl layer::Filter<Registry> for Filter {
             fn enabled(
@@ -79,14 +85,14 @@ fn set_tracing(fmt: reload::Layer<CompactFmtLayer, Registry>) {
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
-    // we initally have compact logs
+    // this is our default fmt.
     let fmt_default = || fmt::layer().compact();
     let (fmt, fmt_reload) = reload::Layer::new(fmt_default());
     set_tracing(fmt);
-
-    // the rocket function then modifies the fmt
+    
     let built = rocket().await;
-
+    
+    // we then hide log `target`s for the initial launch messages.
     fmt_reload
         .modify(|fmt| *fmt = fmt::layer().with_target(false).compact())
         .unwrap();
