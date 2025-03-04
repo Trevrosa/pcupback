@@ -3,13 +3,10 @@ mod routes;
 #[cfg(test)]
 mod schema_test;
 
-use console_subscriber::{ConsoleLayer, ServerAddr};
+use console_subscriber::Server;
 use rocket::{Build, Rocket, fairing::AdHoc, get, routes};
 use routes::{auth::authenticate, sync::sync};
 use sqlx::{Pool, Sqlite, migrate, pool::PoolOptions, sqlite::SqliteConnectOptions};
-use std::net::Ipv4Addr;
-use std::net::SocketAddr;
-use std::net::SocketAddrV4;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{
     Layer, Registry,
@@ -39,25 +36,53 @@ const LOG_LEVEL: LevelFilter = LevelFilter::DEBUG;
 const DB_PATH: &str = "xdd.db";
 /// The path to database.
 #[cfg(test)]
-const DB_PATH: &str = "test.db";
+const DB_PATH: &str = "debug.db";
 
-#[cfg(not(debug_assertions))]
-const TOKIO_CONSOLE_ADDR: ServerAddr =
-    ServerAddr::Tcp(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 6911)));
-#[cfg(debug_assertions)]
-const TOKIO_CONSOLE_ADDR: ServerAddr =
-    ServerAddr::Tcp(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 6669)));
+/// Create a [`Pool<Sqlite>`] with an optional `name`.
+///
+/// if `name` is [`None`], we use the [`DB_PATH`] const.
+///
+/// # Panics
+///
+/// Will panic if db cannot be opened.
+async fn get_db_pool(name: Option<&str>) -> Pool<Sqlite> {
+    // create the test db dir if we are testing
+    #[cfg(test)]
+    let _ = std::fs::create_dir("test_dbs");
 
-async fn rocket() -> Rocket<Build> {
     let db_options = SqliteConnectOptions::new()
-        .filename(DB_PATH)
+        .filename(name.unwrap_or(DB_PATH))
         .create_if_missing(true);
-    let db_pool: Pool<Sqlite> = PoolOptions::new()
+
+    PoolOptions::new()
         .min_connections(1)
         .max_connections(5)
         .connect_with(db_options)
         .await
-        .expect("could not open db");
+        .expect("could not open db")
+}
+
+/// Test a Rocket!
+///
+/// `name` is the test's name.
+#[cfg(test)]
+pub(crate) fn test_rocket(name: &str) -> Rocket<Build> {
+    let mut new_rocket = None;
+    rocket::tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            new_rocket = Some(rocket(Some(&format!("test_dbs/{name}.db"))).await);
+        });
+    new_rocket.expect("no rocket built")
+}
+
+/// Build a Rocket!
+///
+/// if `db_name` is [`None`], we use the [`DB_PATH`] const.
+async fn rocket(db_name: Option<&str>) -> Rocket<Build> {
+    let db_pool = get_db_pool(db_name).await;
 
     // do db migrations. (from the `./migrations` dir)
     tracing::debug!("running migrations..");
@@ -103,13 +128,13 @@ async fn main() -> Result<(), rocket::Error> {
             tracing_subscriber::registry()
                 .with(fmt.with_filter(Filter))
                 // enable debugging with tokio-console
-                .with(
-                    ConsoleLayer::builder()
-                        .server_addr(TOKIO_CONSOLE_ADDR)
-                        .spawn(),
-                )
+                .with(console_subscriber::spawn())
                 .init();
-            tracing::info!("init'd tokio-console rpc server at {TOKIO_CONSOLE_ADDR:?}");
+            tracing::info!(
+                "init'd tokio-console rpc server at {}:{}",
+                Server::DEFAULT_IP,
+                Server::DEFAULT_PORT
+            );
             Some(reload)
         } else {
             // wrap the fmt in a reload::Layer
@@ -121,7 +146,7 @@ async fn main() -> Result<(), rocket::Error> {
         }
     };
 
-    let rocket = rocket().await;
+    let rocket = rocket(None).await;
 
     if let Some(ref reload) = fmt_reload {
         // we then hide log `target`s for the initial launch messages.

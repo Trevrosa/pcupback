@@ -14,7 +14,7 @@ use rocket::{
     State, post,
     serde::json::{self, Json},
 };
-use sqlx::{Executor, Pool, Sqlite, Transaction};
+use sqlx::{Executor, Pool, Sqlite};
 use tracing::instrument;
 
 use pcupback::{
@@ -169,25 +169,25 @@ pub async fn authenticate(
                     .await
                     .map_err(|e| DBError(OtherError(e.to_string())));
 
-                // FIXME: see if this makes the queries atomic. ie. we will execute them starting at the same time.
+                // FIXME: fix this~
                 let mut transaction = match transaction {
                     Ok(t) => t,
                     Err(err) => return Json(Err(err)),
                 };
 
                 // get the last-inserted id in db, or 0 if not found.
-                let max_id = sqlx::query_as::<_, (u32,)>("SELECT MAX(id) FROM users")
+                let max_id = sqlx::query_as("SELECT MAX(id) FROM users")
                     .fetch_one(&mut *transaction)
                     .await
                     // unwrap the tuple
-                    .map(|v| v.0);
+                    .map(|v: (u32,)| v.0);
                 let max_id = match max_id {
                     Ok(id) => id,
                     Err(err) => {
                         if matches!(err, sqlx::Error::RowNotFound) {
                             0
                         } else {
-                            return Json(Err(DBError(OtherError(err.to_string()))))
+                            return Json(Err(DBError(OtherError(err.to_string()))));
                         }
                     }
                 };
@@ -199,23 +199,22 @@ pub async fn authenticate(
                 let session = match new_user {
                     Ok(new_user) => {
                         // store the user in db
-                        if let Err(err) = new_user.store(db).await {
+                        let res = if let Err(err) = new_user.store(&mut *transaction).await {
                             tracing::error!("failed to store user: {err:?}");
                             Err(DBError(InsertError(err.to_string())))
                         } else {
                             // create and store the session
-                            let session =
-                                generate_store_session(&mut *transaction, new_user.id).await;
-                            session
-                        }
+                            generate_store_session(&mut *transaction, new_user.id).await
+                        };
+                        finish_transaction!(transaction);
+
+                        res
                     }
                     Err(err) => {
                         tracing::error!("got err {err} trying to create a new user");
                         Err(HashError(err))
                     }
                 };
-
-                finish_transaction!(transaction);
 
                 session
             }

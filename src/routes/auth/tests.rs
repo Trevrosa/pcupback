@@ -1,6 +1,6 @@
 use rocket::{
     http::{ContentType, Status},
-    local::asynchronous::Client,
+    local::blocking::Client,
     serde::json,
 };
 use uuid::Uuid;
@@ -10,11 +10,11 @@ use super::{
     data::public::{AuthError, AuthRequest},
 };
 
-#[rocket::async_test]
-async fn not_enough_chars() {
+#[test]
+fn not_enough_chars() {
     use super::data::public::InvalidPasswordKind::TooFewChars;
 
-    let client = Client::tracked(crate::rocket().await).await.unwrap();
+    let client = Client::tracked(crate::test_rocket("not_enough_chars")).unwrap();
 
     let req = AuthRequest {
         username: Uuid::new_v4().to_string(),
@@ -25,22 +25,21 @@ async fn not_enough_chars() {
         .post("/auth")
         .header(ContentType::JSON)
         .body(json::to_string(&req).unwrap())
-        .dispatch()
-        .await;
+        .dispatch();
 
     assert_eq!(resp.status(), Status::Ok);
-    let invalid_resp_json: AuthResult = resp.into_json().await.unwrap();
+    let invalid_resp_json: AuthResult = resp.into_json().unwrap();
     assert!(matches!(
         invalid_resp_json.unwrap_err(),
         AuthError::InvalidPassword(TooFewChars)
     ));
 }
 
-#[rocket::async_test]
-async fn too_many_chars() {
+#[test]
+fn too_many_chars() {
     use super::data::public::InvalidPasswordKind::TooManyChars;
 
-    let client = Client::tracked(crate::rocket().await).await.unwrap();
+    let client = Client::tracked(crate::test_rocket("too_many_chars")).unwrap();
 
     let req = AuthRequest {
         username: Uuid::new_v4().to_string(),
@@ -51,11 +50,10 @@ async fn too_many_chars() {
         .post("/auth")
         .header(ContentType::JSON)
         .body(json::to_string(&req).unwrap())
-        .dispatch()
-        .await;
+        .dispatch();
 
     assert_eq!(resp.status(), Status::Ok);
-    let resp_json: AuthResult = resp.into_json().await.unwrap();
+    let resp_json: AuthResult = resp.into_json().unwrap();
     assert!(matches!(
         resp_json.unwrap_err(),
         AuthError::InvalidPassword(TooManyChars)
@@ -63,9 +61,9 @@ async fn too_many_chars() {
 }
 
 // FIXME: fix this test
-#[rocket::async_test]
-async fn login() {
-    let client = Client::tracked(crate::rocket().await).await.unwrap();
+#[test]
+fn login() {
+    let client = Client::tracked(crate::test_rocket("login")).unwrap();
 
     let req = AuthRequest {
         username: Uuid::new_v4().to_string(),
@@ -77,9 +75,7 @@ async fn login() {
         .header(ContentType::JSON)
         .body(json::to_string(&req).unwrap())
         .dispatch()
-        .await
         .into_json::<AuthResult>()
-        .await
         .unwrap();
 
     let session1 = resp1.unwrap();
@@ -89,9 +85,7 @@ async fn login() {
         .header(ContentType::JSON)
         .body(json::to_string(&req).unwrap())
         .dispatch()
-        .await
         .into_json::<AuthResult>()
-        .await
         .unwrap();
 
     let session2 = resp2.unwrap();

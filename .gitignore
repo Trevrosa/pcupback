@@ -3,9 +3,7 @@
 
 # db files
 /*.db
-
-# db tmp files
-/*.db-*
+/test_dbs
 
 # sqlx dir
 /.sqlx
