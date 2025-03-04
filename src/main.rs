@@ -61,71 +61,68 @@ async fn rocket() -> Rocket<Build> {
         .mount("/", routes![index, authenticate, sync])
 }
 
-type CompactFmtLayer = fmt::Layer<Registry, DefaultFields, Format<Compact>>;
-
-/// Set the global logger. journald if available, else `fmt`.
-fn set_tracing(fmt: reload::Layer<CompactFmtLayer, Registry>) {
-    /// Filters `log level` by [`crate::LOG_LEVEL`]
-    struct Filter;
-    impl layer::Filter<Registry> for Filter {
-        fn enabled(
-            &self,
-            meta: &tracing::Metadata<'_>,
-            _ctx: &layer::Context<'_, Registry>,
-        ) -> bool {
-            meta.level() <= &LOG_LEVEL
-        }
-    }
-
-    if let Ok(journald) = tracing_journald::layer() {
-        tracing_subscriber::registry()
-            .with(journald.with_filter(Filter))
-            .init();
-        println!("activated tracing-journald layer");
-    } else {
-        // on debug build, or on feature tokio-console.
-        if cfg!(debug_assertions) || cfg!(feature = "tokio-console") {
-            // enable debugging with tokio-console
-            tracing_subscriber::registry()
-                .with(console_subscriber::spawn())
-                // we ignore fmt and filter if we are debugging.
-                .with(fmt_default())
-                .init();
-            println!("init'd console-subscriber layer");
-        } else {
-            tracing_subscriber::registry()
-                .with(fmt.with_filter(Filter))
-                .init();
-        }
-    }
-}
-
-// this is our default fmt.
+/// this is our default fmt.
+#[inline]
 fn fmt_default<T>() -> fmt::Layer<T, DefaultFields, Format<Compact>> {
     fmt::layer().compact()
 }
 
+/// Filters `log level` by [`crate::LOG_LEVEL`]
+struct Filter;
+
+impl layer::Filter<Registry> for Filter {
+    fn enabled(&self, meta: &tracing::Metadata<'_>, _ctx: &layer::Context<'_, Registry>) -> bool {
+        meta.level() <= &LOG_LEVEL
+    }
+}
+
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
-    // wrap the fmt in a reload::Layer
-    let (fmt, fmt_reload) = reload::Layer::new(fmt_default());
-    set_tracing(fmt);
+    let fmt_reload = if let Ok(journald) = tracing_journald::layer() {
+        tracing_subscriber::registry()
+            .with(journald.with_filter(Filter))
+            .init();
+        println!("activated tracing-journald layer");
+        None
+    } else {
+        // on debug build, or on feature tokio-console.
+        if cfg!(debug_assertions) || cfg!(feature = "tokio-console") {
+            // wrap the fmt in a reload::Layer
+            let (fmt, reload) = reload::Layer::new(fmt_default());
+            tracing_subscriber::registry()
+                .with(fmt.with_filter(Filter))
+                // enable debugging with tokio-console
+                .with(console_subscriber::spawn())
+                .init();
+            tracing::debug!("init'd console-subscriber layer");
+            Some(reload)
+        } else {
+            // wrap the fmt in a reload::Layer
+            let (fmt, reload) = reload::Layer::new(fmt_default());
+            tracing_subscriber::registry()
+                .with(fmt.with_filter(Filter))
+                .init();
+            Some(reload)
+        }
+    };
 
     let rocket = rocket().await;
 
-    // we then hide log `target`s for the initial launch messages.
-    let reload = fmt_reload.modify(|fmt| *fmt = fmt::layer().with_target(false).compact());
-    if reload.is_err() {
-        eprintln!("failed to change fmt");
+    if let Some(ref reload) = fmt_reload {
+        // we then hide log `target`s for the initial launch messages.
+        let _ = reload.modify(|fmt| *fmt = fmt::layer().with_target(false).compact());
+    } else {
+        tracing::debug!("no fmt layer reload handle");
     }
 
     rocket
         .attach(AdHoc::on_liftoff("Tracing", move |_| {
             Box::pin(async move {
                 // we now change it back
-                let reload = fmt_reload.modify(|fmt| *fmt = fmt_default());
-                if reload.is_err() {
-                    eprintln!("failed to change fmt");
+                if let Some(reload) = fmt_reload {
+                    let _ = reload.modify(|fmt| *fmt = fmt_default());
+                } else {
+                    tracing::debug!("failed to access fmt reload handle");
                 }
             })
         }))
