@@ -190,15 +190,14 @@ pub async fn authenticate(
                 let sesh = match new_user {
                     Ok(new_user) => {
                         // store the user in db
-                        let res = if let Err(err) = new_user.store(&mut *transaction).await {
+
+                        if let Err(err) = new_user.store(&mut *transaction).await {
                             tracing::error!("failed to store user: {err:?}");
                             Err(DBError(InsertError(err.to_string())))
                         } else {
                             // create and store the session
                             generate_store_session(&mut *transaction, new_user.id).await
-                        };
-
-                        res
+                        }
                     }
                     Err(err) => {
                         tracing::error!("got err {err} trying to create a new user");
