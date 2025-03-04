@@ -4,7 +4,7 @@ mod routes;
 mod schema_test;
 
 use console_subscriber::Server;
-use rocket::{Build, Rocket, fairing::AdHoc, get, routes};
+use rocket::{Build, Rocket, get, routes};
 use routes::{auth::authenticate, sync::sync};
 use sqlx::{Pool, Sqlite, migrate, pool::PoolOptions, sqlite::SqliteConnectOptions};
 use tracing::level_filters::LevelFilter;
@@ -20,7 +20,7 @@ use tracing_subscriber::{
 };
 
 #[get("/")]
-fn index<'a>() -> &'a str {
+fn index() -> &'static str {
     "Hello, World!"
 }
 
@@ -112,63 +112,65 @@ impl layer::Filter<Registry> for Filter {
     }
 }
 
-#[rocket::main]
-async fn main() -> Result<(), rocket::Error> {
-    let fmt_reload = if let Ok(journald) = tracing_journald::layer() {
-        tracing_subscriber::registry()
-            .with(journald.with_filter(Filter))
-            .init();
-        println!("activated tracing-journald layer");
-        None
-    } else {
-        // on debug build, or on feature tokio-console.
-        if cfg!(debug_assertions) || cfg!(feature = "tokio-console") {
-            // wrap the fmt in a reload::Layer
-            let (fmt, reload) = reload::Layer::new(fmt_default());
+type CompactFmtLayer<T> = fmt::Layer<T, DefaultFields, Format<Compact>>;
+type ReloadCompactFmtLayer<T> = reload::Handle<CompactFmtLayer<T>, T>;
+
+/// Initialize tracing layers.
+///
+/// Returns a reload handle to the [`fmt_default`] created.
+fn init_loggers() -> ReloadCompactFmtLayer<Registry> {
+    // try to create the journald
+    let journald = tracing_journald::layer();
+
+    // we use `console_subscriber` on debug build, or on feature tokio-console.
+    if cfg!(debug_assertions) || cfg!(feature = "tokio-console") {
+        // wrap the fmt in a reload::Layer
+        let (fmt, reload) = reload::Layer::new(fmt_default());
+        if let Ok(journald) = journald {
+            tracing_subscriber::registry()
+                .with(fmt.with_filter(Filter))
+                // enable debugging with tokio-console
+                .with(console_subscriber::spawn())
+                // enable journald subscriber
+                .with(journald)
+                .init();
+            tracing::debug!("init'd journald-subscriber layer");
+        } else {
             tracing_subscriber::registry()
                 .with(fmt.with_filter(Filter))
                 // enable debugging with tokio-console
                 .with(console_subscriber::spawn())
                 .init();
-            tracing::info!(
-                "init'd tokio-console rpc server at {}:{}",
-                Server::DEFAULT_IP,
-                Server::DEFAULT_PORT
-            );
-            Some(reload)
+        }
+        tracing::info!(
+            "init'd tokio-console rpc server at {}:{}",
+            Server::DEFAULT_IP,
+            Server::DEFAULT_PORT
+        );
+        reload
+    } else {
+        // wrap the fmt in a reload::Layer
+        let (fmt, reload) = reload::Layer::new(fmt_default());
+        if let Ok(journald) = journald {
+            tracing_subscriber::registry()
+                .with(fmt.with_filter(Filter))
+                .with(journald)
+                .init();
+            tracing::debug!("init'd journald-subscriber layer");
         } else {
-            // wrap the fmt in a reload::Layer
-            let (fmt, reload) = reload::Layer::new(fmt_default());
             tracing_subscriber::registry()
                 .with(fmt.with_filter(Filter))
                 .init();
-            Some(reload)
         }
-    };
-
-    let rocket = rocket(None).await;
-
-    if let Some(ref reload) = fmt_reload {
-        // we then hide log `target`s for the initial launch messages.
-        let _ = reload.modify(|fmt| *fmt = fmt::layer().with_target(false).compact());
-    } else {
-        tracing::debug!("no fmt layer reload handle");
+        reload
     }
+}
 
-    rocket
-        .attach(AdHoc::on_liftoff("Tracing", move |_| {
-            Box::pin(async move {
-                // we now change it back
-                if let Some(reload) = fmt_reload {
-                    let _ = reload.modify(|fmt| *fmt = fmt_default());
-                } else {
-                    tracing::debug!("failed to access fmt reload handle");
-                }
-            })
-        }))
-        .launch()
-        .await
-        .unwrap();
+#[rocket::main]
+async fn main() -> Result<(), rocket::Error> {
+    init_loggers();
+
+    rocket(None).await.launch().await.unwrap();
 
     Ok(())
 }
