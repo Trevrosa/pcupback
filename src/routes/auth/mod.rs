@@ -73,14 +73,6 @@ async fn generate_store_session(
     }
 }
 
-macro_rules! finish_transaction {
-    ($tx:expr) => {
-        if let Err(err) = $tx.commit().await {
-            return Json(Err(AuthError::DBError(OtherError(err.to_string()))));
-        }
-    };
-}
-
 pub type AuthResult = Result<UserSession, AuthError>;
 
 #[instrument(skip_all)]
@@ -169,7 +161,6 @@ pub async fn authenticate(
                     .await
                     .map_err(|e| DBError(OtherError(e.to_string())));
 
-                // FIXME: fix this~
                 let mut transaction = match transaction {
                     Ok(t) => t,
                     Err(err) => return Json(Err(err)),
@@ -196,7 +187,7 @@ pub async fn authenticate(
                 // we add 1 to get the next id.
                 let new_user = DBUser::new(max_id + 1, req_username, &request.password);
 
-                match new_user {
+                let sesh = match new_user {
                     Ok(new_user) => {
                         // store the user in db
                         let res = if let Err(err) = new_user.store(&mut *transaction).await {
@@ -206,7 +197,6 @@ pub async fn authenticate(
                             // create and store the session
                             generate_store_session(&mut *transaction, new_user.id).await
                         };
-                        finish_transaction!(transaction);
 
                         res
                     }
@@ -214,7 +204,12 @@ pub async fn authenticate(
                         tracing::error!("got err {err} trying to create a new user");
                         Err(HashError(err))
                     }
+                };
+
+                if let Err(err) = transaction.commit().await {
+                    return Json(Err(AuthError::DBError(OtherError(err.to_string()))));
                 }
+                sesh
             }
         }
     };

@@ -8,7 +8,6 @@ use crate::routes::{
 
 use super::data::public::UserData;
 
-// FIXME: fix rocket tests.
 #[test]
 fn dry_sync() {
     let client = Client::tracked(crate::test_rocket("dry_sync")).unwrap();

@@ -60,7 +60,6 @@ fn too_many_chars() {
     ));
 }
 
-// FIXME: fix this test
 #[test]
 fn login() {
     let client = Client::tracked(crate::test_rocket("login")).unwrap();
