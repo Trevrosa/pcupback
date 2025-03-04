@@ -167,19 +167,20 @@ pub async fn authenticate(
                     Err(err) => return Json(Err(err)),
                 };
 
-                // get the largest id in db, or 0 if not found.
-                let max_id = sqlx::query_as::<_, (u32,)>("SELECT MAX(id) FROM users")
+                // get the last-inserted id in db, or 0 if not found.
+                let max_id = sqlx::query_as::<_, (u32,)>("SELECT last_insert_row_id() FROM users")
                     .fetch_one(&mut *transaction)
                     .await
                     // unwrap the tuple
                     .map(|v| v.0)
                     // 0 is default
+                    // FIXME: check if the error is not found.
                     .unwrap_or(0);
 
                 // we add 1 to get the next id.
                 let new_user = DBUser::new(max_id + 1, req_username, &request.password);
 
-                match new_user {
+                let session = match new_user {
                     Ok(new_user) => {
                         // store the user in db
                         if let Err(err) = new_user.store(db).await {
@@ -189,9 +190,6 @@ pub async fn authenticate(
                             // create and store the session
                             let session =
                                 generate_store_session(&mut *transaction, new_user.id).await;
-                            if let Err(err) = transaction.commit().await {
-                                return Json(Err(DBError(OtherError(err.to_string()))));
-                            }
                             session
                         }
                     }
@@ -199,7 +197,12 @@ pub async fn authenticate(
                         tracing::error!("got err {err} trying to create a new user");
                         Err(HashError(err))
                     }
+                };
+                if let Err(err) = transaction.commit().await {
+                    return Json(Err(DBError(OtherError(err.to_string()))));
                 }
+
+                session
             }
         }
     };

@@ -3,9 +3,13 @@ mod routes;
 #[cfg(test)]
 mod schema_test;
 
+use console_subscriber::{ConsoleLayer, ServerAddr};
 use rocket::{Build, Rocket, fairing::AdHoc, get, routes};
 use routes::{auth::authenticate, sync::sync};
 use sqlx::{Pool, Sqlite, migrate, pool::PoolOptions, sqlite::SqliteConnectOptions};
+use std::net::Ipv4Addr;
+use std::net::SocketAddr;
+use std::net::SocketAddrV4;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{
     Layer, Registry,
@@ -36,6 +40,13 @@ const DB_PATH: &str = "xdd.db";
 /// The path to database.
 #[cfg(test)]
 const DB_PATH: &str = "test.db";
+
+#[cfg(not(debug_assertions))]
+const TOKIO_CONSOLE_ADDR: ServerAddr =
+    ServerAddr::Tcp(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 6911)));
+#[cfg(debug_assertions)]
+const TOKIO_CONSOLE_ADDR: ServerAddr =
+    ServerAddr::Tcp(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 6669)));
 
 async fn rocket() -> Rocket<Build> {
     let db_options = SqliteConnectOptions::new()
@@ -92,9 +103,13 @@ async fn main() -> Result<(), rocket::Error> {
             tracing_subscriber::registry()
                 .with(fmt.with_filter(Filter))
                 // enable debugging with tokio-console
-                .with(console_subscriber::spawn())
+                .with(
+                    ConsoleLayer::builder()
+                        .server_addr(TOKIO_CONSOLE_ADDR)
+                        .spawn(),
+                )
                 .init();
-            tracing::debug!("init'd console-subscriber layer");
+            tracing::info!("init'd tokio-console rpc server at {TOKIO_CONSOLE_ADDR:?}");
             Some(reload)
         } else {
             // wrap the fmt in a reload::Layer
