@@ -12,7 +12,13 @@ pub struct DBAppInfo {
 }
 
 impl DBAppInfo {
-    pub fn new(user_id: u32, app_name: impl Into<String>, app_usage: u32, app_limit: u32) -> Self {
+    #[cfg(test)]
+    pub fn new_raw(
+        user_id: u32,
+        app_name: impl Into<String>,
+        app_usage: u32,
+        app_limit: u32,
+    ) -> Self {
         Self {
             user_id,
             app_name: app_name.into(),
@@ -90,6 +96,9 @@ mod tests {
 
     #[sqlx::test]
     fn store_app_usage(db: Pool<Sqlite>) {
-        DBAppInfo::new(1, "xdd", 12, 0).store(&db).await.unwrap();
+        DBAppInfo::new_raw(1, "xdd", 12, 0)
+            .store(&db)
+            .await
+            .unwrap();
     }
 }

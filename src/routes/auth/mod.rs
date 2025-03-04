@@ -196,7 +196,7 @@ pub async fn authenticate(
                 // we add 1 to get the next id.
                 let new_user = DBUser::new(max_id + 1, req_username, &request.password);
 
-                let session = match new_user {
+                match new_user {
                     Ok(new_user) => {
                         // store the user in db
                         let res = if let Err(err) = new_user.store(&mut *transaction).await {
@@ -214,9 +214,7 @@ pub async fn authenticate(
                         tracing::error!("got err {err} trying to create a new user");
                         Err(HashError(err))
                     }
-                };
-
-                session
+                }
             }
         }
     };

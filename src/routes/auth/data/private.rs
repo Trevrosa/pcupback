@@ -38,6 +38,7 @@ impl DBUser {
         })
     }
 
+    #[cfg(test)]
     pub fn new_raw(id: u32, username: impl Into<String>, password: impl Into<String>) -> Self {
         Self {
             id,
@@ -190,7 +191,7 @@ mod tests {
         stored.store(&db).await.unwrap();
         let fetched = DBUser::fetch_one(1, &db).await.unwrap();
 
-        assert_eq!(fetched, stored)
+        assert_eq!(fetched, stored);
     }
 
     #[sqlx::test]
@@ -202,6 +203,6 @@ mod tests {
         assert_eq!(fetched, stored);
 
         let not_exists = DBUser::fetch_one("testdd", &db).await;
-        assert!(matches!(not_exists.unwrap_err(), Error::RowNotFound))
+        assert!(matches!(not_exists.unwrap_err(), Error::RowNotFound));
     }
 }

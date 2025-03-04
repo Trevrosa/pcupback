@@ -17,7 +17,7 @@ async fn fail_user_session(db: Pool<Sqlite>) {
         sqlx::query!("INSERT INTO sessions(user_id, id, last_set) VALUES(NULL, NULL, NULL)")
             .execute(&db)
             .await;
-    assert!(null_values.is_err())
+    assert!(null_values.is_err());
 }
 
 #[sqlx::test]

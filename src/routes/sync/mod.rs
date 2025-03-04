@@ -24,8 +24,8 @@ pub async fn sync(
     session: String,
     request_user_data: Json<Option<UserData>>,
 ) -> Json<SyncResult> {
-    use data::public::SyncError::*;
-    use pcupback::DBErrorKind::*;
+    use data::public::SyncError::{DBError, InvalidSession};
+    use pcupback::DBErrorKind::SelectError;
 
     tracing::info!("got data fetch");
 

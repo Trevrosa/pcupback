@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use pcupback::{DBErrorKind, Fetchable};
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, Sqlite};
@@ -36,12 +34,6 @@ pub struct AppInfo {
     pub(super) limit: u32,
 }
 
-impl AppInfo {
-    pub fn usage(&self) -> Duration {
-        Duration::from_secs(u64::from(self.usage))
-    }
-}
-
 impl From<DBAppInfo> for AppInfo {
     fn from(value: DBAppInfo) -> Self {
         Self {
@@ -69,7 +61,7 @@ mod tests {
 
     #[sqlx::test]
     fn fetch_user_data(db: Pool<Sqlite>) {
-        let app_info = DBAppInfo::new(1, "xddapp", 1, 0);
+        let app_info = DBAppInfo::new_raw(1, "xddapp", 1, 0);
         app_info.store(&db).await.unwrap();
 
         let data = UserData::fetch_one(1, &db).await.unwrap();
