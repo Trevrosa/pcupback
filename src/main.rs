@@ -39,8 +39,6 @@ const DB_PATH: &str = if cfg!(debug_assertions) {
     "xdd.db"
 };
 
-// TODO: create a proc attr macro for my own tests, to harness test_rocket() with the function name.
-
 /// Create a [`Pool<Sqlite>`] with an optional `name`.
 ///
 /// if `name` is [`None`], we use the [`DB_PATH`] const.
@@ -170,7 +168,6 @@ fn init_loggers() -> ReloadCompactFmtLayer<Registry> {
     }
 }
 
-// TODO: add 422 catcher
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
     init_loggers();

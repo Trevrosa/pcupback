@@ -171,7 +171,7 @@ mod tests {
         assert!(DBUserSession::generate(1).store(&db).await.is_ok());
     }
 
-    #[test]
+    #[macros::my_test]
     fn user_creation() {
         DBUser::new(1, "test", "12345678").unwrap();
     }

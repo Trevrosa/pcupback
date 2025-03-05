@@ -27,7 +27,7 @@ pub async fn sync(
     use data::public::SyncError::{DBError, InvalidSession};
     use pcupback::DBErrorKind::{InsertError, SelectError};
 
-    tracing::info!("got data fetch");
+    tracing::info!("got data sync request");
 
     // see src/routes/auth/mod.rs:86
     let db = &**db;
@@ -42,8 +42,6 @@ pub async fn sync(
         // no such session.
         return Json(Err(InvalidSession));
     };
-
-    // TODO: add more logging, check errors sent are descriptive enough
 
     let stored_app_info = DBAppInfo::fetch_all(user_id, db)
         .await
@@ -78,7 +76,7 @@ pub async fn sync(
         .map_err(|e| DBError(SelectError(e.to_string())));
 
     tracing::info!(
-        "sync summary => incoming: {added}, outgoing: {}",
+        "sync'd => incoming: {added}, outgoing: {}",
         stored_data
             .as_ref()
             .map(|d| d.app_usage.len() - added)

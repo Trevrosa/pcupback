@@ -10,7 +10,7 @@ use super::{
     data::public::{AuthError, AuthRequest},
 };
 
-#[test]
+#[macros::my_test]
 fn not_enough_chars() {
     use super::data::public::InvalidPasswordKind::TooFewChars;
 
@@ -35,7 +35,7 @@ fn not_enough_chars() {
     ));
 }
 
-#[test]
+#[macros::my_test]
 fn too_many_chars() {
     use super::data::public::InvalidPasswordKind::TooManyChars;
 
@@ -60,7 +60,7 @@ fn too_many_chars() {
     ));
 }
 
-#[test]
+#[macros::my_test]
 fn login() {
     let client = Client::tracked(crate::test_rocket("login")).unwrap();
 

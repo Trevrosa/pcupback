@@ -15,6 +15,7 @@ tracing = "0.1"
 tracing-journald = "0.3"
 tracing-subscriber = "0.3"
 uuid = { version = "1.15", features = ["v4"] }
+macros = { path = "macros" }
 
 [features]
 # enable tokio console debugging.

@@ -7,6 +7,11 @@
 /// In Json, the requested user's session if ok, else an [`AuthError`]. Or, a [`Json<Result<UserSession, AuthError>>`]
 pub mod auth;
 
-// TODO: add docs
-/// Sync
+/// The user data synchronization endpoint.
+///
+/// # Receives:
+/// The `session_id` of the requested user **and** the client's optional local [`UserData`]. (a [`Option<UserData>`])
+///
+/// # Returns:
+/// In Json, the final stored user data if ok, else an [`SyncError`]. Or, a [`Json<Result<UserData, SyncError>>`]
 pub mod sync;

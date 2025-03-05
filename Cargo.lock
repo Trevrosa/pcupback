@@ -1363,6 +1363,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "macros"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "matchers"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1595,6 +1603,7 @@ dependencies = [
  "argon2",
  "chrono",
  "console-subscriber",
+ "macros",
  "rocket",
  "serde",
  "sqlx",
