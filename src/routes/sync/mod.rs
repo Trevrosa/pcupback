@@ -79,7 +79,10 @@ pub async fn sync(
 
     tracing::info!(
         "sync summary => incoming: {added}, outgoing: {}",
-        stored_data.as_ref().map(|d| d.app_usage.len() - added).unwrap_or(0)
+        stored_data
+            .as_ref()
+            .map(|d| d.app_usage.len() - added)
+            .unwrap_or(0)
     );
 
     Json(stored_data)
