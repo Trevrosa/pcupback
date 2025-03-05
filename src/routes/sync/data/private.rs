@@ -92,10 +92,11 @@ mod tests {
     use pcupback::Storable;
     use sqlx::{Pool, Sqlite};
 
-    use crate::routes::sync::data::private::DBAppInfo;
+    use crate::routes::{auth::data::private::DBUser, sync::data::private::DBAppInfo};
 
     #[sqlx::test]
     fn store_app_usage(db: Pool<Sqlite>) {
+        DBUser::new_raw(1, "test", "pp").store(&db).await.unwrap();
         DBAppInfo::new_raw(1, "xdd", 12, 0)
             .store(&db)
             .await

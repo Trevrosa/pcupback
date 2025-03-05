@@ -69,10 +69,15 @@ mod tests {
     use pcupback::{Fetchable, Storable};
     use sqlx::{Pool, Sqlite};
 
-    use crate::routes::sync::data::{private::DBAppInfo, public::UserData};
+    use crate::routes::{
+        auth::data::private::DBUser,
+        sync::data::{private::DBAppInfo, public::UserData},
+    };
 
     #[sqlx::test]
     fn fetch_user_data(db: Pool<Sqlite>) {
+        DBUser::new_raw(1, "test", "pp").store(&db).await.unwrap();
+
         let app_info = DBAppInfo::new_raw(1, "xddapp", 1, 0);
         app_info.store(&db).await.unwrap();
 

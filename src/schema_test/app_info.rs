@@ -8,13 +8,13 @@ async fn expect_fail(db: Pool<Sqlite>) {
     )
     .execute(&db)
     .await
-    .unwrap();
+    .unwrap_err();
 
     // null values
     sqlx::query!("INSERT INTO app_info(app_name, app_usage, app_limit) VALUES('xdd', NULL, 1)")
         .execute(&db)
         .await
-        .unwrap();
+        .unwrap_err();
 }
 
 #[sqlx::test]
