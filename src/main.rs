@@ -25,18 +25,19 @@ fn index() -> &'static str {
 }
 
 /// The max log level.
-#[cfg(not(debug_assertions))]
-const LOG_LEVEL: LevelFilter = LevelFilter::INFO;
-/// The max log level.
-#[cfg(debug_assertions)]
-const LOG_LEVEL: LevelFilter = LevelFilter::DEBUG;
+const LOG_LEVEL: LevelFilter = if cfg!(debug_assertions) {
+    LevelFilter::DEBUG
+} else {
+    LevelFilter::INFO
+};
 
-/// The path to database.
-#[cfg(not(test))]
-const DB_PATH: &str = "xdd.db";
-/// The path to database.
-#[cfg(test)]
-const DB_PATH: &str = "debug.db";
+/// The database path.
+const DB_PATH: &str = if cfg!(debug_assertions) {
+    // debug db
+    "debug.db"
+} else {
+    "xdd.db"
+};
 
 // TODO: create a proc attr macro for my own tests, to harness test_rocket() with the function name.
 
@@ -85,6 +86,7 @@ pub(crate) fn test_rocket(name: &str) -> Rocket<Build> {
 /// if `db_name` is [`None`], we use the [`DB_PATH`] const.
 async fn rocket(db_name: Option<&str>) -> Rocket<Build> {
     let db_pool = get_db_pool(db_name).await;
+    tracing::debug!("created db pool");
 
     // do db migrations. (from the `./migrations` dir)
     tracing::debug!("running migrations..");
@@ -168,6 +170,7 @@ fn init_loggers() -> ReloadCompactFmtLayer<Registry> {
     }
 }
 
+// TODO: add 422 catcher
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
     init_loggers();

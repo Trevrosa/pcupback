@@ -25,7 +25,7 @@ pub async fn sync(
     request_user_data: Json<Option<UserData>>,
 ) -> Json<SyncResult> {
     use data::public::SyncError::{DBError, InvalidSession};
-    use pcupback::DBErrorKind::SelectError;
+    use pcupback::DBErrorKind::{InsertError, SelectError};
 
     tracing::info!("got data fetch");
 
@@ -43,7 +43,7 @@ pub async fn sync(
         return Json(Err(InvalidSession));
     };
 
-    // TODO: test if this works...
+    // TODO: add more logging, check errors sent are descriptive enough
 
     let stored_app_info = DBAppInfo::fetch_all(user_id, db)
         .await
@@ -55,6 +55,7 @@ pub async fn sync(
     };
 
     // check for `app`s that arent in `stored_app_info`.
+    let mut added = 0;
     if let Json(Some(user_data)) = request_user_data {
         for app in &user_data.app_usage {
             if stored_app_info.iter().any(|s| s.eq(app)) {
@@ -65,8 +66,9 @@ pub async fn sync(
             // `app`, from the request, was not found in the `stored_app_info`.
             let in_db = DBAppInfo::with_app_info(user_id, app.clone());
             if let Err(err) = in_db.store(db).await {
-                return Json(Err(DBError(SelectError(err.to_string()))));
+                return Json(Err(DBError(InsertError(err.to_string()))));
             }
+            added += 1;
         }
     }
 
@@ -74,6 +76,11 @@ pub async fn sync(
     let stored_data = UserData::fetch_one(user_id, db)
         .await
         .map_err(|e| DBError(SelectError(e.to_string())));
+
+    tracing::info!(
+        "sync summary => incoming: {added}, outgoing: {}",
+        stored_data.as_ref().map(|d| d.app_usage.len() - added).unwrap_or(0)
+    );
 
     Json(stored_data)
 }

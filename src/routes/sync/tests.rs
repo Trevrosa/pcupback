@@ -79,3 +79,5 @@ fn sync_store() {
 
     assert_eq!(my_data, Some(stored));
 }
+
+// TODO: add test simulating different clients

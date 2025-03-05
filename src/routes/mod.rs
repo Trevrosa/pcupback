@@ -7,5 +7,6 @@
 /// In Json, the requested user's session if ok, else an [`AuthError`]. Or, a [`Json<Result<UserSession, AuthError>>`]
 pub mod auth;
 
+// TODO: add docs
 /// Sync
 pub mod sync;
