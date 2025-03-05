@@ -121,29 +121,15 @@ type ReloadCompactFmtLayer<T> = reload::Handle<CompactFmtLayer<T>, T>;
 ///
 /// Returns a reload handle to the [`fmt_default`] created.
 fn init_loggers() -> ReloadCompactFmtLayer<Registry> {
-    // try to create the journald
-    let journald = tracing_journald::layer();
-
     // we use `console_subscriber` on debug build, or on feature tokio-console.
     if cfg!(debug_assertions) || cfg!(feature = "tokio-console") {
         // wrap the fmt in a reload::Layer
         let (fmt, reload) = reload::Layer::new(fmt_default());
-        if let Ok(journald) = journald {
-            tracing_subscriber::registry()
-                .with(fmt.with_filter(Filter))
-                // enable debugging with tokio-console
-                .with(console_subscriber::spawn())
-                // enable journald subscriber
-                .with(journald)
-                .init();
-            tracing::debug!("init'd journald-subscriber layer");
-        } else {
-            tracing_subscriber::registry()
-                .with(fmt.with_filter(Filter))
-                // enable debugging with tokio-console
-                .with(console_subscriber::spawn())
-                .init();
-        }
+        tracing_subscriber::registry()
+            .with(fmt.with_filter(Filter))
+            // enable debugging with tokio-console
+            .with(console_subscriber::spawn())
+            .init();
         tracing::info!(
             "init'd tokio-console rpc server at {}:{}",
             Server::DEFAULT_IP,
@@ -153,17 +139,9 @@ fn init_loggers() -> ReloadCompactFmtLayer<Registry> {
     } else {
         // wrap the fmt in a reload::Layer
         let (fmt, reload) = reload::Layer::new(fmt_default());
-        if let Ok(journald) = journald {
-            tracing_subscriber::registry()
-                .with(fmt.with_filter(Filter))
-                .with(journald)
-                .init();
-            tracing::debug!("init'd journald-subscriber layer");
-        } else {
-            tracing_subscriber::registry()
-                .with(fmt.with_filter(Filter))
-                .init();
-        }
+        tracing_subscriber::registry()
+            .with(fmt.with_filter(Filter))
+            .init();
         reload
     }
 }
