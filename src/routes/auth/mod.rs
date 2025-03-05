@@ -178,11 +178,11 @@ pub async fn authenticate(
                         if matches!(err, sqlx::Error::RowNotFound) {
                             0
                         } else {
+                            tracing::error!("got err {err:?} trying to get last user id");
                             return Json(Err(DBError(OtherError(err.to_string()))));
                         }
                     }
                 };
-                dbg!(max_id);
 
                 // we add 1 to get the next id.
                 let new_user = DBUser::new(max_id + 1, req_username, &request.password);
@@ -212,10 +212,7 @@ pub async fn authenticate(
             }
         }
     };
-    tracing::info!(
-        "created with user id: {:?}",
-        session.as_ref().map(|a| a.user_id)
-    );
+    tracing::info!("created with: {:?}", session.as_ref().map(|a| a.user_id));
 
     tracing::debug!(
         "json response: {}",
