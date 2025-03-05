@@ -21,7 +21,7 @@ type SyncResult = Result<UserData, SyncError>;
 #[post("/sync/<session>", data = "<request_user_data>")]
 pub async fn sync(
     db: &State<Pool<Sqlite>>,
-    session: String,
+    session: &str,
     request_user_data: Json<Option<UserData>>,
 ) -> Json<SyncResult> {
     use data::public::SyncError::{DBError, InvalidSession};
@@ -33,7 +33,7 @@ pub async fn sync(
     let db = &**db;
 
     let user_id = sqlx::query_as("SELECT user_id FROM sessions WHERE id = ?")
-        .bind(&session)
+        .bind(session)
         .fetch_optional(db)
         .await
         .map(|o| o.map(|v: (u32,)| v.0));

@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use super::private::DBAppInfo;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct UserData {
     pub app_usage: Vec<AppInfo>,
 }
@@ -13,6 +13,7 @@ pub struct UserData {
 impl<'a> Fetchable<'a, u32> for UserData {
     type DB = Sqlite;
 
+    /// Aggregates associated data in a [`UserData`], converts from in-db values.
     async fn fetch_one<E>(filter: u32, executor: E) -> Result<Self, sqlx::Error>
     where
         E: Executor<'a, Database = Self::DB>,
@@ -34,12 +35,23 @@ pub struct AppInfo {
     pub(super) limit: u32,
 }
 
+impl AppInfo {
+    #[cfg(test)]
+    pub fn new(name: impl Into<String>, usage: u32, limit: u32) -> Self {
+        Self {
+            name: name.into(),
+            usage,
+            limit,
+        }
+    }
+}
+
 impl From<DBAppInfo> for AppInfo {
     fn from(value: DBAppInfo) -> Self {
         Self {
             name: value.app_name,
             usage: value.app_usage,
-            limit: value.app_usage,
+            limit: value.app_limit,
         }
     }
 }

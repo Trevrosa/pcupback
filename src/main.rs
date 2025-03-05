@@ -38,6 +38,8 @@ const DB_PATH: &str = "xdd.db";
 #[cfg(test)]
 const DB_PATH: &str = "debug.db";
 
+// TODO: create a proc attr macro for my own tests, to harness test_rocket() with the function name.
+
 /// Create a [`Pool<Sqlite>`] with an optional `name`.
 ///
 /// if `name` is [`None`], we use the [`DB_PATH`] const.
