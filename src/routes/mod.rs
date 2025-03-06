@@ -7,6 +7,11 @@
 /// In Json, the requested user's session if ok, else an [`AuthError`]. Or, a [`Json<Result<UserSession, AuthError>>`]
 pub mod auth;
 
+// TODO: docs
+pub mod delete_account;
+
+// TODO: reset password
+
 /// The user data synchronization endpoint.
 ///
 /// # Receives:

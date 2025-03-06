@@ -10,7 +10,7 @@ pub fn my_test(_: TokenStream, item: TokenStream) -> TokenStream {
 
     let fn_name = input.sig.ident.to_string();
 
-    let client_decl = quote! {
+    let client_decl = parse_quote! {
         let client = rocket::local::blocking::Client::tracked(crate::test_rocket(#fn_name)).unwrap();
     };
     let test_attr = parse_quote!(#[test]);
@@ -19,9 +19,9 @@ pub fn my_test(_: TokenStream, item: TokenStream) -> TokenStream {
     input
         .block
         .stmts
-        .insert(0, syn::parse(client_decl.into()).unwrap());
+        .insert(0, client_decl);
 
-    let output = quote::quote! {
+    let output = quote! {
         #input
     };
 

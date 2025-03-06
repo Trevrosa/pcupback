@@ -5,7 +5,7 @@ mod schema_test;
 
 use console_subscriber::Server;
 use rocket::{Build, Rocket, get, routes};
-use routes::{auth::authenticate, sync::sync};
+use routes::{auth::authenticate, delete_account::delete_account, sync::sync};
 use sqlx::{Pool, Sqlite, migrate, pool::PoolOptions, sqlite::SqliteConnectOptions};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{
@@ -96,7 +96,7 @@ async fn rocket(db_name: Option<&str>) -> Rocket<Build> {
 
     rocket::build()
         .manage(db_pool)
-        .mount("/", routes![index, authenticate, sync])
+        .mount("/", routes![index, authenticate, sync, delete_account])
 }
 
 /// this is our default fmt.

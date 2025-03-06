@@ -4,5 +4,5 @@ CREATE TABLE sessions (
     -- stored as seconds after the unix epoch. 
     last_set INTEGER NOT NULL,
     -- enforce that `user_id` must exist in `users` as `id`
-    FOREIGN KEY(user_id) REFERENCES users(id)
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );

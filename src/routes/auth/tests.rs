@@ -46,11 +46,7 @@ fn too_many_chars() {
         password: "1".repeat(65),
     };
 
-    let resp = client
-        .post("/auth")
-        .header(ContentType::JSON)
-        .body(json::to_string(&req).unwrap())
-        .dispatch();
+    let resp = client.post("/auth").json(&req).dispatch();
 
     assert_eq!(resp.status(), Status::Ok);
     let resp_json: AuthResult = resp.into_json().unwrap();
@@ -71,8 +67,7 @@ fn login() {
 
     let resp1 = client
         .post("/auth")
-        .header(ContentType::JSON)
-        .body(json::to_string(&req).unwrap())
+        .json(&req)
         .dispatch()
         .into_json::<AuthResult>()
         .unwrap();
@@ -82,7 +77,7 @@ fn login() {
     let resp2 = client
         .post("/auth")
         .header(ContentType::JSON)
-        .body(json::to_string(&req).unwrap())
+        .json(&req)
         .dispatch()
         .into_json::<AuthResult>()
         .unwrap();

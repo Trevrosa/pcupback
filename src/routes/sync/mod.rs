@@ -12,16 +12,16 @@ use rocket::{State, post, serde::json::Json};
 use sqlx::{Pool, Sqlite};
 use tracing::instrument;
 
-type SyncResult = Result<UserData, SyncError>;
+pub type SyncResult = Result<UserData, SyncError>;
 
 /// We want to receive the client's state,
 /// find the diff of the client state and stored state,
 /// and return the final, combined state.  
 #[instrument(skip_all)]
-#[post("/sync/<session>", data = "<request_user_data>")]
+#[post("/sync/<session_id>", data = "<request_user_data>")]
 pub async fn sync(
     db: &State<Pool<Sqlite>>,
-    session: &str,
+    session_id: &str,
     request_user_data: Json<Option<UserData>>,
 ) -> Json<SyncResult> {
     use data::public::SyncError::{DBError, InvalidSession};
@@ -33,7 +33,7 @@ pub async fn sync(
     let db = &**db;
 
     let user_id = sqlx::query_as("SELECT user_id FROM sessions WHERE id = ?")
-        .bind(session)
+        .bind(session_id)
         .fetch_optional(db)
         .await
         .map(|o| o.map(|v: (u32,)| v.0));
@@ -52,8 +52,8 @@ pub async fn sync(
         Ok(info) => info,
         Err(err) => {
             tracing::info!("failed to fetch stored app info");
-            return Json(Err(err))
-        },
+            return Json(Err(err));
+        }
     };
 
     // check for `app`s that arent in `stored_app_info`.
@@ -70,7 +70,7 @@ pub async fn sync(
             if let Err(err) = new_in_db.store(db).await {
                 tracing::warn!("failed to store received data: {err:?}");
                 // TODO: is this the behavior we want?
-                continue
+                continue;
                 // return Json(Err(DBError(InsertError(err.to_string()))));
             }
             added += 1;
