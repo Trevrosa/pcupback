@@ -17,6 +17,7 @@ pub struct DBUser {
 }
 
 impl DBUser {
+    // TODO: docs 
     /// Create a new user to be stored in db.
     ///
     /// Hashes the given password.
@@ -138,6 +139,7 @@ impl DBUserSession {
 impl<'a> Storable<'a> for DBUserSession {
     type DB = Sqlite;
 
+    /// Special behaviour: replaces if there is existing session, does not error.
     async fn store<E>(&self, executor: E) -> Result<SqliteQueryResult, sqlx::Error>
     where
         E: Executor<'a, Database = Self::DB>,

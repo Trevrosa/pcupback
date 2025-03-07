@@ -10,6 +10,8 @@ pub mod auth;
 // TODO: docs
 pub mod delete_account;
 
+pub mod reset_session;
+
 // TODO: reset password
 
 /// The user data synchronization endpoint.

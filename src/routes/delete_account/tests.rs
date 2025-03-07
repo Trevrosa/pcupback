@@ -7,7 +7,7 @@ use crate::routes::{
 
 use super::DeleteAccountResult;
 
-#[macros::my_test]
+#[macros::rocket_test]
 fn create_and_delete() {
     let user = AuthRequest {
         username: "xddddd".to_string(),

@@ -8,7 +8,7 @@ use crate::routes::{
 
 use super::data::public::{AppInfo, UserData};
 
-#[macros::my_test]
+#[macros::rocket_test]
 fn dry_sync() {
     let client = Client::tracked(crate::test_rocket("dry_sync")).unwrap();
 
@@ -42,7 +42,7 @@ fn dry_sync() {
     assert_eq!(resp.app_usage.len(), 0);
 }
 
-#[macros::my_test]
+#[macros::rocket_test]
 fn sync_store() {
     let user = AuthRequest {
         username: Uuid::new_v4().to_string(),
@@ -74,7 +74,7 @@ fn sync_store() {
     assert_eq!(my_data, stored);
 }
 
-#[macros::my_test]
+#[macros::rocket_test]
 fn sync_multi_client() {
     let user = AuthRequest {
         username: Uuid::new_v4().to_string(),
