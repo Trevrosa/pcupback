@@ -33,7 +33,6 @@ const LOG_LEVEL: LevelFilter = if cfg!(debug_assertions) {
 
 /// The database path.
 const DB_PATH: &str = if cfg!(debug_assertions) {
-    // debug db
     "debug.db"
 } else {
     "xdd.db"
@@ -121,10 +120,10 @@ type ReloadCompactFmtLayer<T> = reload::Handle<CompactFmtLayer<T>, T>;
 ///
 /// Returns a reload handle to the [`fmt_default`] created.
 fn init_loggers() -> ReloadCompactFmtLayer<Registry> {
+    // wrap the default fmt in a reload::Layer
+    let (fmt, reload) = reload::Layer::new(fmt_default());
     // we use `console_subscriber` on debug build, or on feature tokio-console.
     if cfg!(debug_assertions) || cfg!(feature = "tokio-console") {
-        // wrap the fmt in a reload::Layer
-        let (fmt, reload) = reload::Layer::new(fmt_default());
         tracing_subscriber::registry()
             .with(fmt.with_filter(Filter))
             // enable debugging with tokio-console
@@ -137,8 +136,6 @@ fn init_loggers() -> ReloadCompactFmtLayer<Registry> {
         );
         reload
     } else {
-        // wrap the fmt in a reload::Layer
-        let (fmt, reload) = reload::Layer::new(fmt_default());
         tracing_subscriber::registry()
             .with(fmt.with_filter(Filter))
             .init();
