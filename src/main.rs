@@ -1,11 +1,14 @@
-mod routes;
+pub mod routes;
 /// Test the database schema.
 #[cfg(test)]
 mod schema_test;
+mod util;
 
 use console_subscriber::Server;
 use rocket::{Build, Rocket, get, routes};
-use routes::{auth::authenticate, sync::sync};
+use routes::{
+    auth::authenticate, delete_account::delete_account, reset_session::reset_session, sync::sync,
+};
 use sqlx::{Pool, Sqlite, migrate, pool::PoolOptions, sqlite::SqliteConnectOptions};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{
@@ -93,9 +96,10 @@ async fn rocket(db_name: Option<&str>) -> Rocket<Build> {
         .await
         .expect("could not run migrations");
 
-    rocket::build()
-        .manage(db_pool)
-        .mount("/", routes![index, authenticate, sync])
+    rocket::build().manage(db_pool).mount(
+        "/",
+        routes![index, authenticate, sync, delete_account, reset_session],
+    )
 }
 
 /// this is our default fmt.
@@ -142,6 +146,8 @@ fn init_loggers() -> ReloadCompactFmtLayer<Registry> {
         reload
     }
 }
+
+// TODO: clippy
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {

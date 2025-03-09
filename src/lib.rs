@@ -66,6 +66,8 @@ pub enum DBErrorKind {
     InsertError(String),
     #[error("SelectError")]
     SelectError(String),
+    #[error("DeleteError")]
+    DeleteError(String),
     #[error("OtherError")]
     OtherError(String),
 }

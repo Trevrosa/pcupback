@@ -8,7 +8,7 @@ use crate::routes::{
 
 use super::data::public::{AppInfo, UserData};
 
-#[macros::my_test]
+#[macros::rocket_test]
 fn dry_sync() {
     let client = Client::tracked(crate::test_rocket("dry_sync")).unwrap();
 
@@ -42,7 +42,7 @@ fn dry_sync() {
     assert_eq!(resp.app_usage.len(), 0);
 }
 
-#[macros::my_test]
+#[macros::rocket_test]
 fn sync_store() {
     let user = AuthRequest {
         username: Uuid::new_v4().to_string(),
@@ -64,9 +64,8 @@ fn sync_store() {
     };
 
     let store = client
-        .post(&format!("/sync/{session_id}"))
-        .header(ContentType::JSON)
-        .body(json::to_string(&Some(&my_data)).unwrap())
+        .post(format!("/sync/{session_id}"))
+        .json(&Some(&my_data))
         .dispatch()
         .into_json::<SyncResult>()
         .unwrap();
@@ -75,7 +74,7 @@ fn sync_store() {
     assert_eq!(my_data, stored);
 }
 
-#[macros::my_test]
+#[macros::rocket_test]
 fn sync_multi_client() {
     let user = AuthRequest {
         username: Uuid::new_v4().to_string(),
@@ -84,8 +83,7 @@ fn sync_multi_client() {
 
     let session = client
         .post("/auth")
-        .header(ContentType::JSON)
-        .body(json::to_string(&user).unwrap())
+        .json(&user)
         .dispatch()
         .into_json::<AuthResult>()
         .unwrap();
@@ -101,8 +99,7 @@ fn sync_multi_client() {
     // this client has some data to store
     let first_client = client
         .post(&url)
-        .header(ContentType::JSON)
-        .body(json::to_string(&Some(&my_data)).unwrap())
+        .json(&Some(&my_data))
         .dispatch()
         .into_json::<SyncResult>()
         .unwrap();

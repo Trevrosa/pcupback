@@ -6,7 +6,7 @@ CREATE TABLE app_info (
     -- stored as seconds
     app_limit INTEGER NOT NULL,
     -- disallow non-existent user ids.
-    FOREIGN KEY(user_id) REFERENCES users(id)
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- use user_id as the index to the `app_usage` table.

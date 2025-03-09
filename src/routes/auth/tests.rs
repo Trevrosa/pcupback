@@ -10,7 +10,7 @@ use super::{
     data::public::{AuthError, AuthRequest},
 };
 
-#[macros::my_test]
+#[macros::rocket_test]
 fn not_enough_chars() {
     use super::data::public::InvalidPasswordKind::TooFewChars;
 
@@ -35,7 +35,7 @@ fn not_enough_chars() {
     ));
 }
 
-#[macros::my_test]
+#[macros::rocket_test]
 fn too_many_chars() {
     use super::data::public::InvalidPasswordKind::TooManyChars;
 
@@ -46,11 +46,7 @@ fn too_many_chars() {
         password: "1".repeat(65),
     };
 
-    let resp = client
-        .post("/auth")
-        .header(ContentType::JSON)
-        .body(json::to_string(&req).unwrap())
-        .dispatch();
+    let resp = client.post("/auth").json(&req).dispatch();
 
     assert_eq!(resp.status(), Status::Ok);
     let resp_json: AuthResult = resp.into_json().unwrap();
@@ -60,7 +56,7 @@ fn too_many_chars() {
     ));
 }
 
-#[macros::my_test]
+#[macros::rocket_test]
 fn login() {
     let client = Client::tracked(crate::test_rocket("login")).unwrap();
 
@@ -71,8 +67,7 @@ fn login() {
 
     let resp1 = client
         .post("/auth")
-        .header(ContentType::JSON)
-        .body(json::to_string(&req).unwrap())
+        .json(&req)
         .dispatch()
         .into_json::<AuthResult>()
         .unwrap();
@@ -82,7 +77,7 @@ fn login() {
     let resp2 = client
         .post("/auth")
         .header(ContentType::JSON)
-        .body(json::to_string(&req).unwrap())
+        .json(&req)
         .dispatch()
         .into_json::<AuthResult>()
         .unwrap();
