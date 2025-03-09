@@ -5,7 +5,6 @@ pub mod data;
 mod tests;
 
 use argon2::{Argon2, PasswordHash, PasswordVerifier, password_hash};
-use chrono::TimeDelta;
 use data::{
     private::{DBUser, DBUserSession},
     public::{AuthError, AuthRequest, UserSession},
@@ -22,16 +21,17 @@ use pcupback::{
     Fetchable, Storable,
 };
 
-use crate::util::{generate_store_session, validate_session};
-
-pub const SESSION_TIMEOUT: TimeDelta = TimeDelta::days(1);
+use crate::util::{
+    auth::{generate_store_session, validate_session},
+    db::ToExecutor,
+};
 
 pub type AuthResult = Result<UserSession, AuthError>;
 
 #[instrument(skip_all)]
 #[post("/auth", data = "<request>")]
 pub async fn authenticate(
-    db: &State<Pool<Sqlite>>,
+    state: &State<Pool<Sqlite>>,
     request: Json<AuthRequest>,
 ) -> Json<AuthResult> {
     use AuthError::{DBError, HashError, InternalError, InvalidPassword, WrongPassword};
@@ -40,12 +40,7 @@ pub async fn authenticate(
         InvalidPasswordKind::TooManyChars,
     };
 
-    // we have &State<Pool<Sqlite>>.
-    // deref &State<..> => State<..>
-    // deref State<T> => T
-    // ref T => &T
-    // we end up with &Pool<Sqlite>
-    let db = &**db;
+    let db = state.to_db();
 
     let req_username = request.username.trim();
 

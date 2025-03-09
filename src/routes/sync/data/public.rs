@@ -13,7 +13,7 @@ pub struct UserData {
 impl<'a> Fetchable<'a, u32> for UserData {
     type DB = Sqlite;
 
-    /// Aggregates associated data in a [`UserData`], converts from in-db values.
+    /// Aggregates associated data in a [`UserData`], converts from in-db types to non-db types.
     async fn fetch_one<E>(filter: u32, executor: E) -> Result<Self, sqlx::Error>
     where
         E: Executor<'a, Database = Self::DB>,

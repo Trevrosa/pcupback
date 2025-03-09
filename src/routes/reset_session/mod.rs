@@ -1,10 +1,13 @@
-use pcupback::DBErrorKind;
+use pcupback::{DBErrorKind, Fetchable};
 use rocket::{State, put, serde::json::Json};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use thiserror::Error;
 
-use crate::util::generate_store_session;
+use crate::{
+    routes::auth::data::private::DBUserSession,
+    util::{auth::generate_store_session, db::ToExecutor},
+};
 
 use super::auth::data::public::UserSession;
 
@@ -22,26 +25,25 @@ pub enum ResetSessionError {
     DBError(#[from] DBErrorKind),
 }
 
-#[put("/auth/reset_sesh/<session_id>")]
-pub async fn reset_session(db: &State<Pool<Sqlite>>, session_id: &str) -> Json<ResetSessionResult> {
+#[put("/auth/reset_session/<session_id>")]
+pub async fn reset_session(
+    state: &State<Pool<Sqlite>>,
+    session_id: &str,
+) -> Json<ResetSessionResult> {
     use DBErrorKind::InsertError;
     use ResetSessionError::{DBError, InvalidSession};
 
-    // FIXME:
-    // TODO: test this works
-    let db = &**db;
+    let db = state.to_db();
 
-    let user_id = sqlx::query_as("SELECT user_id FROM sessions WHERE id = ?")
-        .bind(session_id)
-        .fetch_optional(db)
-        .await
-        .map(|o| o.map(|v: (u32,)| v.0));
+    let session = DBUserSession::fetch_one(session_id, db).await;
 
-    let Ok(Some(user_id)) = user_id else {
+    let Ok(session) = session else {
         // no such session.
         tracing::info!("session was invalid");
         return Json(Err(InvalidSession));
     };
+
+    let user_id = session.user_id;
 
     let new_session = generate_store_session(db, user_id)
         .await

@@ -147,7 +147,7 @@ fn init_loggers() -> ReloadCompactFmtLayer<Registry> {
     }
 }
 
-// TODO: clippy
+// TODO: try jemalloc
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {

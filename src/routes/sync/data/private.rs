@@ -27,6 +27,8 @@ impl DBAppInfo {
         }
     }
 
+    /// Create a [`DBAppInfo`] from an [`AppInfo`] by supplying a `user_id`.
+    #[must_use]
     pub fn with_app_info(user_id: u32, app_info: AppInfo) -> Self {
         Self {
             user_id,

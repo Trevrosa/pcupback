@@ -25,7 +25,7 @@ fn reset_session() {
     let orig_session_id = orig_session.id;
 
     let reset = client
-        .put(format!("/auth/reset_sesh/{orig_session_id}"))
+        .put(format!("/auth/reset_session/{orig_session_id}"))
         .dispatch()
         .into_json::<ResetSessionResult>()
         .unwrap();

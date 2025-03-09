@@ -9,10 +9,19 @@ use data::{
 };
 use pcupback::{Fetchable, Storable};
 use rocket::{State, post, serde::json::Json};
+use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use tracing::instrument;
 
-pub type SyncResult = Result<UserData, SyncError>;
+use crate::routes::auth::data::private::DBUserSession;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct SyncSummary {
+    data: UserData,
+    failed: u32,
+}
+
+pub type SyncResult = Result<SyncSummary, SyncError>;
 
 /// We want to receive the client's state,
 /// find the diff of the client state and stored state,
@@ -32,17 +41,15 @@ pub async fn sync(
     // see src/routes/auth/mod.rs:86
     let db = &**db;
 
-    let user_id = sqlx::query_as("SELECT user_id FROM sessions WHERE id = ?")
-        .bind(session_id)
-        .fetch_optional(db)
-        .await
-        .map(|o| o.map(|v: (u32,)| v.0));
+    let session = DBUserSession::fetch_one(session_id, db).await;
 
-    let Ok(Some(user_id)) = user_id else {
+    let Ok(session) = session else {
         // no such session.
         tracing::info!("session was invalid");
         return Json(Err(InvalidSession));
     };
+
+    let user_id = session.user_id;
 
     let stored_app_info = DBAppInfo::fetch_all(user_id, db)
         .await
@@ -58,6 +65,7 @@ pub async fn sync(
 
     // check for `app`s that arent in `stored_app_info`.
     let mut added = 0;
+    let mut failed = 0;
     if let Json(Some(user_data)) = request_user_data {
         for app in &user_data.app_usage {
             if stored_app_info.iter().any(|s| s.eq(app)) {
@@ -69,9 +77,8 @@ pub async fn sync(
             let new_in_db = DBAppInfo::with_app_info(user_id, app.clone());
             if let Err(err) = new_in_db.store(db).await {
                 tracing::warn!("failed to store received data: {err:?}");
-                // TODO: is this the behavior we want?
+                failed += 1;
                 continue;
-                // return Json(Err(DBError(InsertError(err.to_string()))));
             }
             added += 1;
         }
@@ -83,12 +90,19 @@ pub async fn sync(
         .map_err(|e| DBError(SelectError(e.to_string())));
 
     tracing::info!(
-        "sync'd => incoming: {added}, outgoing: {}",
+        "sync'd => incoming: {added}, outgoing: {}, failed: {failed}",
         stored_data
             .as_ref()
             .map(|d| d.app_usage.len() - added)
             .unwrap_or(0)
     );
 
-    Json(stored_data)
+    match stored_data {
+        Ok(data) => {
+            let summary = SyncSummary { data, failed };
+
+            Json(Ok(summary))
+        }
+        Err(err) => Json(Err(err)),
+    }
 }

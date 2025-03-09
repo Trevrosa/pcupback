@@ -39,7 +39,7 @@ fn dry_sync() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(resp.app_usage.len(), 0);
+    assert_eq!(resp.data.app_usage.len(), 0);
 }
 
 #[macros::rocket_test]
@@ -71,7 +71,7 @@ fn sync_store() {
         .unwrap();
     let stored = store.unwrap();
 
-    assert_eq!(my_data, stored);
+    assert_eq!(my_data, stored.data);
 }
 
 #[macros::rocket_test]
@@ -103,7 +103,7 @@ fn sync_multi_client() {
         .dispatch()
         .into_json::<SyncResult>()
         .unwrap();
-    let first_client_data = first_client.unwrap();
+    let first_client_sync = first_client.unwrap();
 
     // this client has no data
     let another_client = client
@@ -115,6 +115,6 @@ fn sync_multi_client() {
         .unwrap();
     let another_client_data = another_client.unwrap();
 
-    assert_eq!(&my_data, &first_client_data);
-    assert_eq!(first_client_data, another_client_data);
+    assert_eq!(&my_data, &first_client_sync.data);
+    assert_eq!(first_client_sync, another_client_data);
 }

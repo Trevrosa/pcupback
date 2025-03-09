@@ -1,18 +1,18 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use pcupback::Storable;
 use sqlx::{Executor, Sqlite};
 
-use crate::routes::auth::{
-    SESSION_TIMEOUT,
-    data::{private::DBUserSession, public::UserSession},
-};
+use crate::routes::auth::data::{private::DBUserSession, public::UserSession};
 
-pub fn session_timeout(dt: DateTime<Utc>) -> bool {
-    Utc::now().time() - dt.time() > SESSION_TIMEOUT
+pub(crate) const SESSION_TIMEOUT: TimeDelta = TimeDelta::days(1);
+
+/// Return `true` if `dt` is more than [`SESSION_TIMEOUT`] ago, else, return `false`.
+pub(crate) fn session_timeout(dt: DateTime<Utc>) -> bool {
+    Utc::now() - dt > SESSION_TIMEOUT
 }
 
 /// Check if `session` is timed out. If it is, generate and store a new one.
-pub async fn validate_session<'a>(
+pub(crate) async fn validate_session<'a>(
     executor: impl Executor<'a, Database = Sqlite>,
     session: Result<DBUserSession, sqlx::Error>,
     new_id: u32,
@@ -39,7 +39,7 @@ pub async fn validate_session<'a>(
 }
 
 // store a session, returning Ok(session)
-pub async fn generate_store_session(
+pub(crate) async fn generate_store_session(
     executor: impl Executor<'_, Database = Sqlite>,
     user_id: u32,
 ) -> Result<UserSession, sqlx::Error> {
@@ -51,5 +51,38 @@ pub async fn generate_store_session(
             tracing::error!("failed to store session: {err:?}");
             Err(err)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{TimeDelta, Utc};
+    use pcupback::Storable;
+    use sqlx::{Pool, Sqlite};
+
+    use crate::{routes::auth::data::private::DBUser, util::auth::SESSION_TIMEOUT};
+
+    #[sqlx::test]
+    async fn generate_store_session(db: Pool<Sqlite>) {
+        // no such user id `1`
+        super::generate_store_session(&db, 1).await.unwrap_err();
+
+        // generate the user, now ok.
+        DBUser::new_raw(1, "ppk1", "12").store(&db).await.unwrap();
+        super::generate_store_session(&db, 1).await.unwrap();
+    }
+
+    #[test]
+    fn session_timeout() {
+        // not timeout
+        assert!(!super::session_timeout(Utc::now()));
+        assert!(!super::session_timeout(
+            Utc::now() - SESSION_TIMEOUT + TimeDelta::seconds(1)
+        ));
+        // yes timeout
+        assert!(super::session_timeout(Utc::now() - SESSION_TIMEOUT));
+        assert!(super::session_timeout(
+            Utc::now() - SESSION_TIMEOUT - TimeDelta::seconds(1)
+        ));
     }
 }

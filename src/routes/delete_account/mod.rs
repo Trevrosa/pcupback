@@ -1,12 +1,14 @@
 #[cfg(test)]
 mod tests;
 
-use pcupback::DBErrorKind;
+use pcupback::{DBErrorKind, Fetchable};
 use rocket::{State, put, serde::json::Json};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use thiserror::Error;
 use tracing::instrument;
+
+use crate::{routes::auth::data::private::DBUserSession, util::db::ToExecutor};
 
 #[derive(Debug, Error, Deserialize, Serialize)]
 enum DeleteAccountError {
@@ -21,27 +23,23 @@ type DeleteAccountResult = Result<(), DeleteAccountError>;
 #[instrument(skip_all)]
 #[put("/auth/delete_account/<session_id>")]
 pub async fn delete_account(
-    db: &State<Pool<Sqlite>>,
+    state: &State<Pool<Sqlite>>,
     session_id: &str,
 ) -> Json<DeleteAccountResult> {
     use self::DeleteAccountError::{DBError, InvalidSession};
     use DBErrorKind::DeleteError;
 
-    // TODO: move this to a lib function?
-    let db = &**db;
+    let db = state.to_db();
 
-    // TODO: this too? lib/auth
-    let user_id = sqlx::query_as("SELECT user_id FROM sessions WHERE id = ?")
-        .bind(session_id)
-        .fetch_optional(db)
-        .await
-        .map(|o| o.map(|v: (u32,)| v.0));
+    let session = DBUserSession::fetch_one(session_id, db).await;
 
-    let Ok(Some(user_id)) = user_id else {
+    let Ok(session) = session else {
         // no such session.
         tracing::info!("session was invalid");
         return Json(Err(InvalidSession));
     };
+
+    let user_id = session.user_id;
 
     let delete_op = sqlx::query!("DELETE FROM users WHERE id = ?", user_id)
         .execute(db)
