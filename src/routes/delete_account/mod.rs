@@ -8,7 +8,7 @@ use sqlx::{Pool, Sqlite};
 use thiserror::Error;
 use tracing::instrument;
 
-use crate::{routes::auth::data::private::DBUserSession, util::db::ToExecutor};
+use crate::{routes::auth::data::private::DBUserSession, util::db::PoolStateExt};
 
 #[derive(Debug, Error, Deserialize, Serialize)]
 enum DeleteAccountError {
