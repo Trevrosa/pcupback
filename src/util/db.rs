@@ -32,5 +32,5 @@ pub trait PoolStateExt<T: Database>: Deref<Target = State<Pool<T>>> {
     }
 }
 
-/// Blanket impl for all T which implement
+// Blanket impl
 impl<T, D: Database> PoolStateExt<D> for T where T: Deref<Target = State<Pool<D>>> {}
