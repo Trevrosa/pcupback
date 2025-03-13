@@ -1,4 +1,4 @@
-use rocket::{http::ContentType, local::blocking::Client, serde::json};
+use rocket::{http::ContentType, serde::json};
 use uuid::Uuid;
 
 use crate::routes::{
@@ -10,12 +10,7 @@ use super::data::public::{AppInfo, UserData};
 
 #[macros::rocket_test]
 fn dry_sync() {
-    let client = Client::tracked(crate::test_rocket("dry_sync")).unwrap();
-
-    let user = AuthRequest {
-        username: Uuid::new_v4().to_string(),
-        password: "12345678".to_string(),
-    };
+    let user = AuthRequest::random_valid();
 
     let session = client
         .post("/auth")
@@ -44,10 +39,7 @@ fn dry_sync() {
 
 #[macros::rocket_test]
 fn sync_store() {
-    let user = AuthRequest {
-        username: Uuid::new_v4().to_string(),
-        password: "12345678".to_string(),
-    };
+    let user = AuthRequest::random_valid();
 
     let session = client
         .post("/auth")

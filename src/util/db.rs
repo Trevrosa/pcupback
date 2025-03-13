@@ -8,7 +8,7 @@ pub trait PoolStateExt<T: Database>: Deref<Target = State<Pool<T>>> {
     /// Unwrap a rocket-managed database pool to one which implements [`sqlx::Executor`].
     ///
     /// The trait bound for `Self` enforces that `Self` dereferences to [`State<Pool<T>>`].
-    /// 
+    ///
     /// The conversion goes like this:
     /// ```
     ///     &State<Pool<T>> where T: Database
@@ -20,9 +20,9 @@ pub trait PoolStateExt<T: Database>: Deref<Target = State<Pool<T>>> {
     ///     &Pool<T>
     ///```
     /// We end up with `&Pool<T>`, which implements [`sqlx::Executor`].
-    /// 
+    ///
     /// # Note
-    /// 
+    ///
     /// Because of the function definition and `Self` trait bounds, the compiler auto-derefs for us. So instead of `return &**self`, the actual implementation is just `return self`.
     #[inline]
     #[must_use]

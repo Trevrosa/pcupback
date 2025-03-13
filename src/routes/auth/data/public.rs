@@ -55,3 +55,13 @@ pub struct AuthRequest {
     pub username: String,
     pub password: String,
 }
+
+impl AuthRequest {
+    #[cfg(test)]
+    pub fn random_valid() -> Self {
+        Self {
+            username: uuid::Uuid::new_v4().to_string(),
+            password: "12345678".to_string(),
+        }
+    }
+}

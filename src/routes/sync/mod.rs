@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use tracing::instrument;
 
-use crate::routes::auth::data::private::DBUserSession;
+use crate::{routes::auth::data::private::DBUserSession, util::db::PoolStateExt};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct SyncSummary {
@@ -29,7 +29,7 @@ pub type SyncResult = Result<SyncSummary, SyncError>;
 #[instrument(skip_all)]
 #[post("/sync/<session_id>", data = "<request_user_data>")]
 pub async fn sync(
-    db: &State<Pool<Sqlite>>,
+    state: &State<Pool<Sqlite>>,
     session_id: &str,
     request_user_data: Json<Option<UserData>>,
 ) -> Json<SyncResult> {
@@ -38,8 +38,7 @@ pub async fn sync(
 
     tracing::info!("got data sync request");
 
-    // see src/routes/auth/mod.rs:86
-    let db = &**db;
+    let db = state.to_db();
 
     let session = DBUserSession::fetch_one(session_id, db).await;
 

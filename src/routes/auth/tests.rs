@@ -60,10 +60,7 @@ fn too_many_chars() {
 fn login() {
     let client = Client::tracked(crate::test_rocket("login")).unwrap();
 
-    let req = AuthRequest {
-        username: Uuid::new_v4().to_string(),
-        password: "12345678".to_string(),
-    };
+    let req = AuthRequest::random_valid();
 
     let resp1 = client
         .post("/auth")
