@@ -23,7 +23,7 @@ use pcupback::{
 
 use crate::util::{
     auth::{generate_store_session, validate_session},
-    db::ToExecutor,
+    db::PoolStateExt,
 };
 
 pub type AuthResult = Result<UserSession, AuthError>;

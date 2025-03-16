@@ -8,6 +8,7 @@ use console_subscriber::Server;
 use rocket::{Build, Rocket, get, routes};
 use routes::{
     auth::authenticate, delete_account::delete_account, reset_session::reset_session, sync::sync,
+    validate_session::validate_session,
 };
 use sqlx::{Pool, Sqlite, migrate, pool::PoolOptions, sqlite::SqliteConnectOptions};
 use tracing::level_filters::LevelFilter;
@@ -65,6 +66,7 @@ async fn get_db_pool(name: Option<&str>) -> Pool<Sqlite> {
         .expect("could not open db")
 }
 
+// TODO: expose raw sql endpoint when cfg(test)
 /// Test a Rocket!
 ///
 /// `name` is the test's name.
@@ -96,10 +98,16 @@ async fn rocket(db_name: Option<&str>) -> Rocket<Build> {
         .await
         .expect("could not run migrations");
 
-    rocket::build().manage(db_pool).mount(
-        "/",
-        routes![index, authenticate, sync, delete_account, reset_session],
-    )
+    let routes = routes![
+        index,
+        authenticate,
+        delete_account,
+        validate_session,
+        reset_session,
+        sync,
+    ];
+
+    rocket::build().manage(db_pool).mount("/", routes)
 }
 
 /// this is our default fmt.

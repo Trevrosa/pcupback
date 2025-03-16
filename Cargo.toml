@@ -21,6 +21,5 @@ macros = { path = "macros" }
 tokio-console = []
 
 [profile.release]
-# FIXME: uncomment these when building final binary.
-# lto = "fat"
-# codegen-units = 1
+lto = "fat"
+codegen-units = 1

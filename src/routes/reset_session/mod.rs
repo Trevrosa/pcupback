@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     routes::auth::data::private::DBUserSession,
-    util::{auth::generate_store_session, db::ToExecutor},
+    util::{auth::generate_store_session, db::PoolStateExt},
 };
 
 use super::auth::data::public::UserSession;

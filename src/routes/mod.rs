@@ -12,6 +12,8 @@ pub mod delete_account;
 
 pub mod reset_session;
 
+pub mod validate_session;
+
 // TODO: reset password
 
 /// The user data synchronization endpoint.
