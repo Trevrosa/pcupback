@@ -96,6 +96,18 @@ mod tests {
 
     use crate::routes::{auth::data::private::DBUser, sync::data::private::DBAppInfo};
 
+    #[test]
+    fn db_appinfo_eq() {
+        let a = DBAppInfo::new_raw(1, "ddd", 2, 0);
+        let b = DBAppInfo::new_raw(1, "d", 2, 0);
+        let a_same = DBAppInfo::new_raw(1, "ddd", 2, 0);
+
+        assert_eq!(a, a);
+        assert_eq!(a, a_same);
+        assert_ne!(a, b);
+        assert_ne!(b, a_same);
+    }
+
     #[sqlx::test]
     fn store_app_usage(db: Pool<Sqlite>) {
         DBUser::new_raw(1, "test", "pp").store(&db).await.unwrap();

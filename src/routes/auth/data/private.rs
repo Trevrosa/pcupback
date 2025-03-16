@@ -1,5 +1,5 @@
 use argon2::{
-    Argon2, PasswordHash, PasswordHasher,
+    Argon2, PasswordHasher,
     password_hash::{SaltString, rand_core::OsRng},
 };
 use chrono::{DateTime, Utc};
@@ -48,17 +48,6 @@ impl DBUser {
             id,
             username: username.into(),
             password_hash: password.into(),
-        }
-    }
-
-    #[allow(unused)]
-    pub fn with_hashed(id: u32, username: impl Into<String>, hashed: &PasswordHash) -> Self {
-        let password_hash = hashed.to_string();
-
-        Self {
-            id,
-            username: username.into(),
-            password_hash,
         }
     }
 }

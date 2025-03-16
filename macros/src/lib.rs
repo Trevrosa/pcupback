@@ -27,3 +27,26 @@ pub fn rocket_test(_args: TokenStream, item: TokenStream) -> TokenStream {
 
     output.into()
 }
+
+// TODO: see this
+// #[proc_macro_attribute]
+// pub fn blanket_impl(args: TokenStream, item: TokenStream) -> TokenStream {
+//     let args = syn::parse_macro_input!(args as syn::)
+//     let mut input = syn::parse_macro_input!(item as syn::ItemMod);
+
+//     let content = input.content.unwrap();
+
+
+//     let the_trait = content.1.iter().filter_map(|i| {
+//         let syn::Item::Trait(t) = i else {
+//             return None
+//         };
+//         if t.ident.to_string().to_lowercase() ==  {
+//             Some(t)
+//         } else {
+//             None
+//         }
+//     });
+
+//     todo!()
+// }
