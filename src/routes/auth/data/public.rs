@@ -22,6 +22,8 @@ impl From<DBUserSession> for UserSession {
 
 #[derive(Error, Debug, Serialize, Deserialize)]
 pub enum AuthError {
+    #[error("EmptyUsername")]
+    EmptyUsername,
     #[error("InvalidPassword")]
     InvalidPassword(#[from] InvalidPasswordKind),
     #[error("WrongPassword")]
