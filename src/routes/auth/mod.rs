@@ -34,7 +34,9 @@ pub async fn authenticate(
     state: &State<Pool<Sqlite>>,
     request: Json<AuthRequest>,
 ) -> Json<AuthResult> {
-    use AuthError::{DBError, HashError, InternalError, InvalidPassword, WrongPassword, EmptyUsername};
+    use AuthError::{
+        DBError, EmptyUsername, HashError, InternalError, InvalidPassword, WrongPassword,
+    };
     use data::public::{
         HashErrorKind::ParseError, InvalidPasswordKind::TooFewChars,
         InvalidPasswordKind::TooManyChars,
@@ -45,7 +47,7 @@ pub async fn authenticate(
     let req_username = request.username.trim();
 
     if req_username.is_empty() {
-        return Json(Err(EmptyUsername))
+        return Json(Err(EmptyUsername));
     }
 
     // check the database for a user with the same username requested.
