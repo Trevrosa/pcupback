@@ -34,18 +34,21 @@ pub async fn authenticate(
     state: &State<Pool<Sqlite>>,
     request: Json<AuthRequest>,
 ) -> Json<AuthResult> {
-    use AuthError::{DBError, HashError, InternalError, InvalidPassword, WrongPassword, EmptyUsername};
+    use AuthError::{
+        DBError, EmptyUsername, HashError, InternalError, InvalidPassword, WrongPassword,
+    };
     use data::public::{
         HashErrorKind::ParseError, InvalidPasswordKind::TooFewChars,
         InvalidPasswordKind::TooManyChars,
     };
+    use pcupback::DBErrorKind::SelectError;
 
     let db = state.to_db();
 
     let req_username = request.username.trim();
 
     if req_username.is_empty() {
-        return Json(Err(EmptyUsername))
+        return Json(Err(EmptyUsername));
     }
 
     // check the database for a user with the same username requested.
@@ -97,9 +100,9 @@ pub async fn authenticate(
             }
         }
         // the requested user doesnt exist. lets try to create a new account:
-        Err(err) => {
+        Err(sqlx::Error::RowNotFound) => {
             tracing::info!(
-                "no existing user {} ({err:?}), creating new account",
+                "no existing user {}, creating new account",
                 request.username
             );
 
@@ -166,6 +169,11 @@ pub async fn authenticate(
                 }
                 sesh
             }
+        }
+        // an error occurred while querying database
+        Err(err) => {
+            tracing::error!("got err {err:?} trying to query db for user {req_username}.");
+            Err(DBError(SelectError(err.to_string())))
         }
     };
     tracing::info!("created with: {:?}", session.as_ref().map(|a| a.user_id));

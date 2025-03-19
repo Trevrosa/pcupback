@@ -23,6 +23,23 @@ use tracing_subscriber::{
     util::SubscriberInitExt,
 };
 
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
+#[cfg(target_env = "msvc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+#[rocket::main]
+async fn main() -> Result<(), rocket::Error> {
+    init_loggers();
+
+    rocket(None).await.launch().await.unwrap();
+
+    Ok(())
+}
+
 #[get("/")]
 fn index() -> &'static str {
     "Hello, World!"
@@ -153,15 +170,4 @@ fn init_loggers() -> ReloadCompactFmtLayer<Registry> {
             .init();
         reload
     }
-}
-
-// TODO: try jemalloc
-
-#[rocket::main]
-async fn main() -> Result<(), rocket::Error> {
-    init_loggers();
-
-    rocket(None).await.launch().await.unwrap();
-
-    Ok(())
 }
