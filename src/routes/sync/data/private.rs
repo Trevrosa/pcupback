@@ -11,6 +11,12 @@ pub struct DBAppInfo {
     pub app_limit: u32,
 }
 
+#[derive(Debug, FromRow, PartialEq, Eq)]
+pub struct DBUserDebug {
+    pub user_id: u32,
+    pub stored: String,
+}
+
 impl DBAppInfo {
     #[cfg(test)]
     pub fn new_raw(
@@ -83,6 +89,27 @@ impl<'a> Fetchable<'a, u32> for DBAppInfo {
         E: Executor<'a, Database = Self::DB>,
     {
         sqlx::query_as("SELECT * FROM app_info WHERE user_id = ?")
+            .bind(filter)
+            .fetch_all(executor)
+            .await
+    }
+}
+
+impl<'a> Fetchable<'a, u32> for DBUserDebug {
+    type DB = Sqlite;
+
+    async fn fetch_one<E>(_filter: u32, _executor: E) -> Result<Self, sqlx::Error>
+    where
+        E: Executor<'a, Database = Self::DB>,
+    {
+        unimplemented!()
+    }
+
+    async fn fetch_all<E>(filter: u32, executor: E) -> Result<Vec<Self>, sqlx::Error>
+    where
+        E: Executor<'a, Database = Self::DB>,
+    {
+        sqlx::query_as("SELECT * FROM user_debug WHERE user_id = ?")
             .bind(filter)
             .fetch_all(executor)
             .await

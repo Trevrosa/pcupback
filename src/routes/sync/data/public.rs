@@ -3,11 +3,12 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Executor, Sqlite};
 use thiserror::Error;
 
-use super::private::DBAppInfo;
+use super::private::{DBAppInfo, DBUserDebug};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct UserData {
     pub app_usage: Vec<AppInfo>,
+    pub debug: Vec<UserDebug>,
 }
 
 impl<'a> Fetchable<'a, u32> for UserData {
@@ -16,15 +17,33 @@ impl<'a> Fetchable<'a, u32> for UserData {
     /// Aggregates associated data in a [`UserData`], converts from in-db types to non-db types.
     async fn fetch_one<E>(filter: u32, executor: E) -> Result<Self, sqlx::Error>
     where
-        E: Executor<'a, Database = Self::DB>,
+        E: Executor<'a, Database = Self::DB> + Copy,
     {
         let app_usage: Vec<AppInfo> = DBAppInfo::fetch_all(filter, executor)
             .await?
             .into_iter()
-            .map(|a: DBAppInfo| a.into())
+            .map(Into::into)
+            .collect();
+        let debug: Vec<UserDebug> = DBUserDebug::fetch_all(filter, executor)
+            .await?
+            .into_iter()
+            .map(Into::into)
             .collect();
 
-        Ok(Self { app_usage })
+        Ok(Self { app_usage, debug })
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct UserDebug {
+    pub stored: String,
+}
+
+impl From<DBUserDebug> for UserDebug {
+    fn from(value: DBUserDebug) -> Self {
+        Self {
+            stored: value.stored,
+        }
     }
 }
 

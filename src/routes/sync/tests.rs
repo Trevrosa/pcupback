@@ -53,6 +53,7 @@ fn sync_store() {
 
     let my_data = UserData {
         app_usage: vec![AppInfo::new("io1", 2, 0), AppInfo::new("io2", 10, 10)],
+        debug: vec![],
     };
 
     let store = client
@@ -84,6 +85,7 @@ fn sync_multi_client() {
 
     let my_data = UserData {
         app_usage: vec![AppInfo::new("io1", 2, 0), AppInfo::new("io2", 10, 10)],
+        debug: vec![],
     };
 
     let url = format!("/sync/{session_id}");

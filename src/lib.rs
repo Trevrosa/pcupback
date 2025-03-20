@@ -43,7 +43,7 @@ where
     /// See [`sqlx::Error`].
     async fn fetch_one<E>(filter: F, executor: E) -> Result<Self, sqlx::Error>
     where
-        E: Executor<'a, Database = Self::DB>;
+        E: Executor<'a, Database = Self::DB> + Copy;
 
     /// Fetch all Self from the [`Self::DB`] database, using `filter` to filter.
     ///
@@ -54,7 +54,7 @@ where
     /// See [`sqlx::Error`].
     async fn fetch_all<E>(filter: F, executor: E) -> Result<Vec<Self>, sqlx::Error>
     where
-        E: Executor<'a, Database = Self::DB>,
+        E: Executor<'a, Database = Self::DB> + Copy,
     {
         Ok(vec![Self::fetch_one(filter, executor).await?])
     }
