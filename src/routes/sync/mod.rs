@@ -9,7 +9,7 @@ use data::{
 };
 use pcupback::{Fetchable, Storable};
 use rocket::{State, post, serde::json::Json};
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use tracing::instrument;
 
@@ -124,7 +124,7 @@ pub async fn sync(
         "sync'd => incoming: {added}, outgoing: {}, failed: {failed}",
         stored_data
             .as_ref()
-            .map(|d| d.app_usage.len() - added)
+            .map(|d| d.app_usage.len() + d.debug.len() - added)
             .unwrap_or(0)
     );
 
