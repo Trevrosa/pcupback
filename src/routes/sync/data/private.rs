@@ -1,7 +1,7 @@
 use pcupback::{Fetchable, Storable};
 use sqlx::{Executor, FromRow, Sqlite, sqlite::SqliteQueryResult};
 
-use super::public::AppInfo;
+use super::public::{AppInfo, UserDebug};
 
 #[derive(Debug, FromRow, PartialEq, Eq)]
 pub struct DBAppInfo {
@@ -15,6 +15,29 @@ pub struct DBAppInfo {
 pub struct DBUserDebug {
     pub user_id: u32,
     pub stored: String,
+}
+
+impl PartialEq<UserDebug> for DBUserDebug {
+    fn eq(&self, other: &UserDebug) -> bool {
+        self.stored == other.stored
+    }
+}
+
+impl<'a> Storable<'a> for DBUserDebug {
+    type DB = Sqlite;
+
+    async fn store<E>(&self, executor: E) -> Result<SqliteQueryResult, sqlx::Error>
+    where
+        E: Executor<'a, Database = Self::DB>,
+    {
+        sqlx::query!(
+            "INSERT INTO user_debug(user_id, stored) VALUES(?, ?)",
+            self.user_id,
+            self.stored
+        )
+        .execute(executor)
+        .await
+    }
 }
 
 impl DBAppInfo {

@@ -4,12 +4,12 @@ pub mod data;
 mod tests;
 
 use data::{
-    private::DBAppInfo,
+    private::{DBAppInfo, DBUserDebug},
     public::{SyncError, UserData},
 };
 use pcupback::{Fetchable, Storable};
 use rocket::{State, post, serde::json::Json};
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use tracing::instrument;
 
@@ -62,10 +62,26 @@ pub async fn sync(
         }
     };
 
-    // check for `app`s that arent in `stored_app_info`.
+    // TODO: make a macro/function to make new ones
+    
+    let stored_debug = DBUserDebug::fetch_all(user_id, db)
+        .await
+        .map_err(|e| DBError(SelectError(e.to_string())));
+
+    let stored_debug = match stored_debug {
+        Ok(info) => info,
+        Err(err) => {
+            tracing::info!("failed to fetch stored app info");
+            return Json(Err(err));
+        }
+    };
+
     let mut added = 0;
     let mut failed = 0;
+
+    // check for differences between the request's userdata and our stored one.
     if let Json(Some(user_data)) = request_user_data {
+        // check for `app`s that arent in `stored_app_info`.
         for app in &user_data.app_usage {
             if stored_app_info.iter().any(|s| s.eq(app)) {
                 // `stored_app_info` conatins `app`
@@ -74,6 +90,22 @@ pub async fn sync(
 
             // `app`, from the request, was not found in the `stored_app_info`.
             let new_in_db = DBAppInfo::with_app_info(user_id, app.clone());
+            if let Err(err) = new_in_db.store(db).await {
+                tracing::warn!("failed to store received data: {err:?}");
+                failed += 1;
+                continue;
+            }
+            added += 1;
+        }
+
+        for debug in user_data.debug {
+            if stored_debug.iter().any(|s| s.eq(&debug)) {
+                // `stored_app_info` conatins `app`
+                continue;
+            }
+
+            // `app`, from the request, was not found in the `stored_app_info`.
+            let new_in_db = DBUserDebug { user_id, stored: debug.stored };
             if let Err(err) = new_in_db.store(db).await {
                 tracing::warn!("failed to store received data: {err:?}");
                 failed += 1;
