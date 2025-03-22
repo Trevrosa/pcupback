@@ -24,3 +24,6 @@ pub mod validate_session;
 /// # Returns:
 /// In Json, the final stored user data if ok, else an [`SyncError`]. Or, a [`Json<Result<UserData, SyncError>>`]
 pub mod sync;
+
+#[cfg(test)]
+pub mod sql;

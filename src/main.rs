@@ -83,19 +83,24 @@ async fn get_db_pool(name: Option<&str>) -> Pool<Sqlite> {
         .expect("could not open db")
 }
 
-// TODO: expose raw sql endpoint when cfg(test)
 /// Test a Rocket!
 ///
 /// `name` is the test's name.
 #[cfg(test)]
 pub(crate) fn test_rocket(name: &str) -> Rocket<Build> {
+    use routes::sql::sql;
+
     let mut new_rocket = None;
     rocket::tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap()
         .block_on(async {
-            new_rocket = Some(rocket(Some(&format!("test_dbs/{name}.db"))).await);
+            new_rocket = Some(
+                rocket(Some(&format!("test_dbs/{name}.db")))
+                    .await
+                    .mount("/", routes![sql]),
+            );
         });
     new_rocket.expect("no rocket built")
 }
